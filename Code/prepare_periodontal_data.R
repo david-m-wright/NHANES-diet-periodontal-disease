@@ -98,3 +98,4 @@ perio_pocket <- perio_raw %>%
 
 
 rm(dental_raw, tooth_count_status)
+cat("\n Periodontal data prepared")

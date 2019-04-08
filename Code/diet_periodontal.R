@@ -88,58 +88,9 @@ dietary <- dietary %>%
   inner_join(select(nhanes, SEQN), by = "SEQN") 
 
 
+food_grps_grms_per_day <- food_grps_grms_per_day %>% 
+  # Only records for cohort members
+  inner_join(select(nhanes, SEQN), by = "SEQN")
+  
 
-# # Lookup table for non-dietary variables
-# names(nhanes)
-# library(nhanesA)
-# 
-# nhanesTableVars()
-# #DEMO_F, SMQ_F,
-# nm2 <- lapply(list("DEMO_F", "SMQ_F", "OHXPER_F"), nhanesTranslate, colnames = names(nhanes)[str_detect(names(nhanes), "^[A-Z]+$")])
-# nhanesTranslate("SMQ_F", colnames = names(smoking))
-# nm3 <- nhanesTranslate("DEMO_F", colnames = names(demographic))
-# nhanesTranslate("DEMO_F", "SDDSRVYR")
-# demographic2 <- 
-# demographic3 <- nhanesTranslate("DEMO_F", "RIDSTATR")
-# demographic4 <- nhanesTranslate("DEMO_F", colnames = c("SEQN", "SDDSRVYR", "RIDSTATR", "RIAGENDR", "RIDAGEYR"), data = nhanes("DEMO_F"))
-# prp <- nhanesTranslate("OHXPER_F", names)
-
-
-
-#rm(demographic, smoking, tooth_count, energy, perio_raw, perio_cal, perio_pocket, diabetes)
-
-### Treelet analysis ###
-
-
-# Stability of components (sign test)
-
-
-# ### Models ###
-#   
-#   invlogit <- 
-#     function (x) 
-#     {
-#       1/(1 + exp(-x))
-#     }  
-#   
-# 
-# 
-# ### Clinical attachment loss ###
-# 
-# exp(coef(cal3)) %>% enframe() %>% print(n = Inf)
-# invlogit(coef(cal3)) %>% enframe() %>% print(n = Inf)
-# nh %>% count(sites_assessed)
-# 
-# TC3 -ve
-# TC4 ++ve
-# TC5 +ve
-# 
-# # # Random forests
-# library(randomForest)
-# nhrf <- select(nh, c("CAL_sites", adj_vars, diet_vars))
-# train <- sample(1:nrow(nhrf), round(nrow(nhrf)*0.8))
-# # Slow
-# cal0_rf <- randomForest(formula = CAL_sites ~ ., data = nhrf, subset = train)
-
-
-
+cat("\n Cohort prepared")
