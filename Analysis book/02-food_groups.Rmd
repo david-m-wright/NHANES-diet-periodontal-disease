@@ -1,0 +1,262 @@
+# Food groups and periodontal disease {#food-groups}
+Chapter completed **2019-04-04**.
+
+```{r setup, include=FALSE}
+library(checkpoint)
+checkpoint("2019-03-11")
+
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(here)
+library(tidyverse)
+library(treelet) # For treelet transform
+library(betareg) # For Beta regression
+library(Formula) # For multipart formulas used in Beta regression
+library(lmtest) # For likelihood ratio tests of Beta regressions
+library(ggdendro)
+library(splines)
+library(broom)
+
+```
+
+
+
+These notes describe analysis of associations between food groups and periodontal outcomes. Data were drawn from NHANES waves F to H (2009/10 to 2013/14). 
+
+## Cohort construction
+
+```{r prepare modelling dataset, include=FALSE, cache=T}
+source(here("Code", "diet_periodontal.R"))
+source(here("Code", "helper_functions.R"))
+# Note that if this chunk is cached then all of the packages called within these scripts must be loaded manually.
+```
+
+Selection of food groups to include in the treelet analysis is described below.
+
+```{r table of food groups included}
+# Select combination of non-overlapping groups that gives the maximum resolution possible
+food_groups_nhanes <- food_grps_grms_per_day %>% 
+  
+  select(SEQN, 
+         #matches("BEV(11|21|22|231|232|233|241|242)$"),
+         matches("BEV(0|21|22|231|232|233|241|242)$"),
+         EGG0,
+         matches("FAT(1|2)$"),
+         matches("FRUIT(11|2|31|32|33|34|35)$"),
+         matches("GRAIN(1|21|22|23|3|4|5|6)$"),
+         matches("MEAT(1|2|3|4|5|6|7|8)$"),
+         matches("MILK(1|2|3|4)$"),
+         matches("SUGAR(1|2)$"),
+         matches("VEG(1|2|3|4|5|6|7|8)$"),
+         WATER1)
+
+
+fgrp %>% 
+  select(grp_code, grp_description) %>% 
+  distinct() %>%
+  transmute(`Food group` = grp_code, 
+            `Description` = grp_description, 
+            `In dendrogram` = if_else(grp_code %in% names(food_groups_nhanes), "Yes", "")) %>% 
+  kable()
+
+```
+
+
+
+```{r run treelets on food groups, include = F}
+
+# Scale data so can intepret treelets on correlation scale
+food_groups_scl <- food_groups_nhanes %>%
+  select(-SEQN) %>%
+  scale()
+
+food_groups_cor <- cor(food_groups_scl)
+
+# Generate maximum height tree
+# Save basis vectors at all cut levels so the most useful can be selected later
+food_groups_tree_full <- Run_JTree(food_groups_cor, maxlev = ncol(food_groups_cor)-1, whichsave = 1:(ncol(food_groups_cor)-1))
+# Extract the treelet components and associated variances
+food_groups_tc_full <- TTVariances(food_groups_tree_full, food_groups_cor)
+
+# Dendrogram of maximum height tree
+food_groups_dendro <- dendro_data(ConvertTTDendro(food_groups_tree_full))
+
+```
+
+The full height dendrogram for the included food groups is given below.
+```{r dendrogram, fig.height = 11, fig.width=7, echo = F}
+ggdendrogram(food_groups_dendro, rotate = T)
+```
+
+
+```{r full treelet scree plot, echo=F}
+# Scree plot to choose number of treelet components to retain
+food_groups_tc_full$tcv %>% 
+  ggplot(aes(x = Component, y = Variance)) +
+  geom_line() +
+  geom_point() +
+  theme_light() + 
+  ggtitle("Scree plot for treelet tranformation of food group intake data")
+```
+
+The scree plot indicates that it would be appropriate to retain 8 components, as beyond this point there is little incremental increase in variance explained with each additional component.
+
+```{r treelet cross validation, include =F}
+## Initial analysis - data driven selection of number of components and cut points
+
+## Cross validation ##
+# Data driven cross validation to choose a cut level that can describe the 
+# data with few components (TCs)
+# Set the desired number of components (m) based on scree plot and then find the best cut level
+# Cross validation scores for each cut level
+m <- 8
+cvs <- replicate(5, CrossValidateTT(food_groups_scl, m = m))
+
+```
+
+```{r treelet cross validation plot, echo=F}
+apply(cvs, 1, mean) %>% 
+  enframe() %>%
+  transmute(Cross_validation_score = value, Cut_level = as.numeric(str_extract(name, "[0-9]{1,2}"))) %>% 
+  ggplot(aes(x = Cut_level, y = Cross_validation_score)) +
+  geom_line() +
+  theme_light() + 
+  ggtitle("Cross validation performance of treelet transformation") +
+  labs(x = "Cut level", y = "Cross validation score")
+
+```
+    
+The cross validation plot indicates that a cut level of 25 would be appropriate, as there is little additional increase in score with increasing cut level beyond this point.
+
+```{r fit reduced treele, include = F}
+
+# Project selected components to get scores for each individual using the selected cut level
+# Cut level selected based on  cross validation and inspection of dendrogram
+
+# Original
+food_groups_tc_reduced <- TTVariances(food_groups_tree_full, cor(food_groups_scl), cut_level = 25, components = m)
+food_groups_tc_scores <- food_groups_scl %*% food_groups_tc_reduced$tc
+
+### Add TC scores to main NHANES dataset
+nh <- bind_cols(nhanes, as_tibble(food_groups_tc_scores)) %>% 
+  # Classify TC scores into deciles
+  mutate_at(vars(matches("^TC[0-9]{1,2}$")), list(~as.factor(ntile(., n = 10)))) %>% 
+  rename_at(vars(matches("^TC[0-9]{1,2}$")), ~paste0(., "_dec")) %>% 
+  # Raw TC scores
+  bind_cols(as_tibble(food_groups_tc_scores)) %>% 
+  inner_join(dietary, by = "SEQN")
+
+#food_groups_out <- bind_cols(diet, data.frame(food_groups_tc_scores))
+
+# Extract loadings for TCs
+food_groups_loadings <- food_groups_tc_reduced$tc %>% 
+  as_tibble(rownames = "Variable") %>% 
+  gather(Component, Value, -Variable) %>% 
+  # Order by leaf labelling order
+  mutate(Variable = factor(Variable, levels = as.character(food_groups_dendro$labels$label)))
+
+```
+
+There was very little correlation among the TCs.
+
+```{r TC score distributions, echo=F}
+# Distribution of TC scores
+food_groups_tc_scores %>% 
+  as_tibble() %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 50) + 
+  facet_wrap(~key, scales="free_x") + 
+  theme_light() +
+  labs(x = "TC score", y = "Frequency") + 
+  ggtitle("Distribution of Treelet Component scores")
+
+# Correlation of scores
+# fairly low correlation across scores
+food_groups_tc_cor <- cor(food_groups_tc_scores) %>% 
+  formatC(digits = 2, format = "f")
+food_groups_tc_cor[upper.tri(food_groups_tc_cor, diag = T)] <- ""
+kable(food_groups_tc_cor, caption = "Correlation of TC scores")
+
+```
+
+Components TC1 and TC2 were broadly loaded but the others were sparse.
+
+
+```{r TC loading distribution, echo = F}
+# Number of non-zero loadings for each TC
+food_groups_loadings %>% 
+  group_by(Component) %>% 
+  summarise(`Non-zero scores` = sum(abs(Value) > 0)) %>% 
+  kable()
+
+
+```
+
+```{r treelet loading plots, fig.height=11, fig.width=7}
+ggplot(food_groups_loadings, aes(x = Variable, y = Value)) +
+  facet_wrap(~Component, nrow = 1) +
+  geom_bar(stat = "identity") + 
+  coord_flip() + 
+  theme_light() +
+  ggtitle("TC loading plot for analysis of food group intake")
+
+```
+
+
+## Clinical attachment loss (CAL)
+
+Associations between TCs and CAL were assessed using Beta regression.
+
+```{r food group CAL beta regression, echo=F}
+nh$prop_CAL_sites3mm_beta <- PropTransform(nh$prop_CAL_sites3mm)
+
+fg1 <- betareg(formula = prop_CAL_sites3mm_beta ~ RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + 
+     TC7 + TC8 | RIDAGEYR + RIAGENDR + SMQ020 + diabetes, data = nh)
+summary(fg1)
+
+```
+
+High scores for TC1 associated with lower proportion of sites with CAL. High scores for TC5 and TC6 were associated with a greater proportion of sites with CAL. Gradients in risk across the range of each TC were in the region of 5-6% (TC1) and 3-4% (TC5 and TC6).
+
+```{r TC predictions from beta regression, echo =F}
+# Model to predict from
+mpred <- fg1
+
+# Take quantiles and stack
+tc_qtx <- StackQuantiles(food_groups_tc_scores, probs = seq(0.02, 0.98, by = 0.01))
+
+# Prediction for average aged, male, non-smoker, non-diabetic, average energy intake
+cal_pred_frame <- cbind(RIDAGEYR = mean(nh$RIDAGEYR), 
+       RIAGENDR = 1, 
+       SMQ020 = 2, 
+       diabetes = F,
+       KCAL = mean(nh$KCAL),
+       tc_qtx) %>% 
+  as_tibble()
+  
+
+cal_pred_frame %>% 
+  select(component, qtile) %>% 
+  cbind(CAL_pred = predict(mpred, newdata = cal_pred_frame, type = "response")) %>% 
+ggplot(aes(x = qtile, y = CAL_pred)) +
+  geom_line() +
+  facet_wrap(~component) +
+  theme_light() +
+  labs(y = expression("Proportion of sites with CAL">="3mm"), x = "Percentile of TC distribution") +
+  ggtitle("Predicted extent of clinical attachment loss")
+
+
+```
+
+
+
+```{r CAL TC polynomial models, include = F}
+# Cubic spline fit
+# cal5 <- update(cal4, .~. - TC1 - TC2 - TC3 - TC4 - TC5 - TC6 - TC7 + bs(TC1) + bs(TC2) + bs(TC3) + bs(TC4) + bs(TC5) + bs(TC6) + bs(TC7)|., data = nh)
+# summary(cal5)
+# # Quadratic fit
+# cal6 <- update(cal4, .~. + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) |., data = nh)
+# summary(cal6)
+```

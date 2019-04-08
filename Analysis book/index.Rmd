@@ -1,0 +1,24 @@
+--- 
+title: "Dietary patterns and periodontal outcomes"
+author: "Project team: David Wright, Jayne Woodside, Anne Nugent, Gerry McKenna"
+date: "Book generated: `r Sys.Date()`"
+site: bookdown::bookdown_site
+output: bookdown::gitbook
+documentclass: book
+bibliography: [packages.bib]
+biblio-style: apalike
+link-citations: yes
+#github-repo: rstudio/bookdown-demo
+description: "Notes describing analysis of NHANES dietary and periodontal data."
+---
+
+# Introduction
+
+These notes describe analysis of NHANES dietary and periodontal data.
+
+```{r include=FALSE}
+# automatically create a bib database for R packages
+knitr::write_bib(c(
+  .packages(), 'bookdown', 'knitr', 'rmarkdown'
+), 'packages.bib')
+```

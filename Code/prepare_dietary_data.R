@@ -98,15 +98,15 @@ food2 <- list.files(path = here("NHANES"), pattern = "DR2IFF_[A-Z]{1}.XPT", recu
   summarise(DR2IGRMS = sum(DR2IGRMS))
 
 
-# Average intake across days 
-foods_grms_per_day <- food1 %>% 
-  full_join(food2, by = c("SEQN", "FDCD", "DRDINT")) %>% 
-  # Take the mean if an individual was measured on both days, 
-  mutate_at(c("DR1IGRMS", "DR2IGRMS"), list(function(.){if_else(is.na(.), 0, .)})) %>% 
-  # Otherwise take the exising value (the parallel maximum here)
-  mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS))) %>% 
-  ungroup() %>% 
-  select(SEQN, FDCD, GRMS) 
+# # Average intake across days 
+# foods_grms_per_day <- food1 %>% 
+#   full_join(food2, by = c("SEQN", "FDCD", "DRDINT")) %>% 
+#   # Take the mean if an individual was measured on both days, 
+#   mutate_at(c("DR1IGRMS", "DR2IGRMS"), list(function(.){if_else(is.na(.), 0, .)})) %>% 
+#   # Otherwise take the exising value (the parallel maximum here)
+#   mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS))) %>% 
+#   ungroup() %>% 
+#   select(SEQN, FDCD, GRMS) 
 
 
 ### Groups of foods ###
@@ -118,7 +118,7 @@ foods_grms_per_day <- food1 %>%
 fcd <- read_xpt(here("NHANES/2009_2010/DRXFCD_F.XPT")) %>% 
   mutate(DRXFDCD_char = format(DRXFDCD, digits = 8))
 # Modification codes
-fcdl <- read_xpt(here("NHANES/2009_2010/DRXMCD_F.XPT"))
+#fcdl <- read_xpt(here("NHANES/2009_2010/DRXMCD_F.XPT"))
 
 
 

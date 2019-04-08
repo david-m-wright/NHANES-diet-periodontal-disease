@@ -1,9 +1,5 @@
----
-title: "Analysis notes - nutrient intake and periodontal disease"
-author: "Project team: David Wright, Jayne Woodside, Anne Nugent, Gerry McKenna"
-date: "11 March 2019"
-output: html_document
----
+# Nutrient intake and periodontal disease {#nutrient}
+Chapter completed **2019-11-03**.
 ```{r checkpoint setup, include = FALSE}
 library(checkpoint)
 checkpoint("2019-03-11")
@@ -11,12 +7,17 @@ checkpoint("2019-03-11")
 knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 library(here)
+library(tidyverse)
+library(treelet) # For treelet transform
 library(betareg) # For Beta regression
 library(Formula) # For multipart formulas used in Beta regression
 library(lmtest) # For likelihood ratio tests of Beta regressions
+library(ggdendro)
 library(splines)
 library(broom)
 ```
+
+
 
 These notes describe analysis of associations between dietary nutrient intake and periodontal outcomes. Data were drawn from NHANES waves F to H (2009/10 to 2013/14). These waves were selected because they included full mouth periodontal examinations (waves A to C had only half mouth examinations).
 

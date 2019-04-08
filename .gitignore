@@ -5,5 +5,11 @@
 
 NHANES/
 Output/
-Analysis notes/Diet and periodontal disease.docx
 Archived code/
+
+Analysis notes/
+!Analysis notes/diet_periodontal_analysis.Rmd
+!Analysis notes/food_groups_periodontal_analysis.Rmd
+
+**Analysis book/.rds
+

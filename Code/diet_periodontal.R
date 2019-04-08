@@ -2,7 +2,7 @@
 # Joining of NHANES datasets
 # Using average of two 24hour recall periods
 require(here)
-
+require(tidyverse)
 
 source(here("Code", "prepare_periodontal_data.R"))
 source(here("Code", "prepare_dietary_data.R"))
