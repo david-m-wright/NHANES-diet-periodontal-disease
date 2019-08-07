@@ -165,7 +165,7 @@ fdd <- fcd %>%
 # Draw from changes file in FNDDS notes - relatively minor
 
 
-# Total intake
+# Total intake by group
 food_grp1 <- food1 %>% 
   inner_join(fdd %>% 
                select(DRXFDCD, grp_code), 
@@ -186,13 +186,28 @@ food_grps_grms_per_day <- food_grp1 %>%
   full_join(food_grp2, by = c("SEQN", "grp_code", "DRDINT")) %>% 
   # Take the mean if an individual was measured on both days, 
   mutate_at(c("DR1IGRMS", "DR2IGRMS"), function(.){if_else(is.na(.), 0, .)}) %>% 
-  # Otherwise take the exising value (the parallel maximum here)
+  # Otherwise take the existing value (the parallel maximum here)
   mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS))) %>% 
   ungroup() %>% 
   select(SEQN, grp_code, GRMS) %>% 
   # Wide format
   spread(grp_code, GRMS, fill = 0) 
 
+
+# Total intake (not grouped)
+# Note that these totals contain both dry matter and liquid
+food_total_grms_per_day <- food1 %>% 
+  group_by(SEQN) %>% 
+  summarise(DRDINT = DRDINT[1], DR1IGRMS = sum(DR1IGRMS)) %>% 
+  full_join(food2 %>% 
+               group_by(SEQN) %>% 
+               summarise(DR2IGRMS = sum(DR2IGRMS)),
+             by = "SEQN") %>% 
+  # Take the mean if an individual was measured on both days, 
+  mutate_at(c("DR1IGRMS", "DR2IGRMS"), function(.){if_else(is.na(.), 0, .)}) %>% 
+  # Otherwise take the existing value (the parallel maximum here)
+  mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS)))
+  
 
 cat("\n Dietary data prepared")
 

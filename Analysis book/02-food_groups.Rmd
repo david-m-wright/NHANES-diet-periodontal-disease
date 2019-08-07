@@ -1,11 +1,8 @@
 # Food groups and periodontal disease {#food-groups}
-Chapter completed **2019-04-04**.
+Chapter compiled **`r Sys.Date()`**
 
 ```{r setup, include=FALSE}
-library(checkpoint)
-checkpoint("2019-03-11")
-
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 library(knitr)
 library(here)
 library(tidyverse)
@@ -13,43 +10,41 @@ library(treelet) # For treelet transform
 library(betareg) # For Beta regression
 library(Formula) # For multipart formulas used in Beta regression
 library(lmtest) # For likelihood ratio tests of Beta regressions
+library(quantreg) # For quantile regression
+library(lqr) # For logistic quantile regression
+library(cdfquantreg) # For logistic quantile regression (more recent package)
 library(ggdendro)
 library(splines)
 library(broom)
 
 ```
 
+The previous chapter detailed treelet transformation of NHANES dietary data and associations with periodontal outcomes. Whilst many of the nutrient groupings identified by the TCs were sensible, it was not possible to determine which types of *diet* provided these nutrients. This chapter focuses on associations between diet (rather than nutrient intake) and periodontal disease in an effort to extract real-world dietary patterns that could form the basis for diet recommendations to improve periodontal outcomes.
 
+## Dietary data
+Data were drawn from NHANES waves F to H (2009/10 to 2013/14) and the same process of exclusions used to generate the analysis cohort. The NHANES dietary data contains files detailing the individual foods and drinks consumed during the two 24 hour survey periods for each individual. The number of different food items consumed across the cohort is very large and contains many items consumed by very few people, thus providing little information on which to base inference. Therefore, food items were classified into food groups defined in the USDA Food and Nutrient Database for Dietary Studies, version 5 @ahuja_usda_2012.
 
-These notes describe analysis of associations between food groups and periodontal outcomes. Data were drawn from NHANES waves F to H (2009/10 to 2013/14). 
-
-## Cohort construction
-
-```{r prepare modelling dataset, include=FALSE, cache=T}
+```{r prepare modelling dataset, include=FALSE, cache=F}
 source(here("Code", "diet_periodontal.R"))
 source(here("Code", "helper_functions.R"))
-# Note that if this chunk is cached then all of the packages called within these scripts must be loaded manually.
 ```
 
-Selection of food groups to include in the treelet analysis is described below.
+Food groups were selected for inclusion in the treelet analysis such that they were non-overlapping and gave the maximum resolution possible.
 
 ```{r table of food groups included}
-# Select combination of non-overlapping groups that gives the maximum resolution possible
 food_groups_nhanes <- food_grps_grms_per_day %>% 
   
   select(SEQN, 
-         #matches("BEV(11|21|22|231|232|233|241|242)$"),
          matches("BEV(0|21|22|231|232|233|241|242)$"),
          EGG0,
          matches("FAT(1|2)$"),
          matches("FRUIT(11|2|31|32|33|34|35)$"),
          matches("GRAIN(1|21|22|23|3|4|5|6)$"),
          matches("MEAT(1|2|3|4|5|6|7|8)$"),
-         matches("MILK(1|2|3|4)$"),
+         matches("MILK(11|2|3|4)$"),
          matches("SUGAR(1|2)$"),
          matches("VEG(1|2|3|4|5|6|7|8)$"),
          WATER1)
-
 
 fgrp %>% 
   select(grp_code, grp_description) %>% 
@@ -57,18 +52,31 @@ fgrp %>%
   transmute(`Food group` = grp_code, 
             `Description` = grp_description, 
             `In dendrogram` = if_else(grp_code %in% names(food_groups_nhanes), "Yes", "")) %>% 
-  kable()
+  kable(caption="USDA food groups included in treelet analysis.")
 
 ```
 
+An important modelling decision is how to adjust for total energy intake when determining dietary patterns. The initial approach (as in the nutrient intake chapter) was to use correlations of raw intake quantities (g/day) as the input to the Treelet algorithm and then adjust for total energy intake (`KCAL`) in regression modelling of the outcome. There was no association between `KCAL` and CAL outcomes indicating that the observed effects were largely independent of energy intake.
+
+However, when the median intakes of food groups were compared by TC score it became apparent that some of the TCs were highly correlated with overall quantity of food intake. For example, higher intake of almost all food groups was found in  high deciles of the first treelet component. This may have occured simply because when consuming more, the probability of including a greater variety of items (at reasonable quantities) increases. Consuming more of everything is not a sensible dietary recommendation so the problem remains how to separate the dietary patterns from the overall quantities consumed.
+
+The approach chosen was to scale the intakes of each food group by the total energy consumption for that individual to give an indication of the proportion of the diet attributable to that food group. This was done crudely by dividing the grammes intake by total `KCAL` however this does not account for the differences in energy values between foods and may downweight the foods never consumed in large quantities.
+
+When comparing the initial raw quantity analysis with an analysis of variables scaled by `KCAL` the cluster trees were similar but the variables included in each TC and the loadings were not. `KCAL` was also excluded from the regression models to avoid overadjustment. When plotting the resulting TC deciles against unadjusted daily intake (g) the summaries no longer give the impression that simply consuming more is better. 
 
 
 ```{r run treelets on food groups, include = F}
 
-# Scale data so can intepret treelets on correlation scale
-food_groups_scl <- food_groups_nhanes %>%
+# Scale by overall energy intake
+food_groups_scl <- food_groups_nhanes %>% 
+  mutate_at(vars(-SEQN), ~./nhanes$KCAL) %>% 
   select(-SEQN) %>%
   scale()
+
+# Scale data so can intepret treelets on correlation scale
+# food_groups_scl <- food_groups_nhanes %>%
+#   select(-SEQN) %>%
+#   scale()
 
 food_groups_cor <- cor(food_groups_scl)
 
@@ -83,8 +91,9 @@ food_groups_dendro <- dendro_data(ConvertTTDendro(food_groups_tree_full))
 
 ```
 
-The full height dendrogram for the included food groups is given below.
-```{r dendrogram, fig.height = 11, fig.width=7, echo = F}
+The full height dendrogram for the included food groups revealed plausible associations among food groups. For example, the most closely correlated groups were lettuce and salad dressing, followed by milk and ready-to-eat cereals.
+
+```{r dendrogram, fig.height = 11, fig.width=7, echo = F, fig.cap="Dendrogram of food group intake scaled by overall energy intake."}
 ggdendrogram(food_groups_dendro, rotate = T)
 ```
 
@@ -114,6 +123,8 @@ cvs <- replicate(5, CrossValidateTT(food_groups_scl, m = m))
 
 ```
 
+The cross validation plot indicates that a cut level of 28 would be appropriate, as there is little additional increase in score with increasing cut level beyond this point.
+
 ```{r treelet cross validation plot, echo=F}
 apply(cvs, 1, mean) %>% 
   enframe() %>%
@@ -125,16 +136,15 @@ apply(cvs, 1, mean) %>%
   labs(x = "Cut level", y = "Cross validation score")
 
 ```
-    
-The cross validation plot indicates that a cut level of 25 would be appropriate, as there is little additional increase in score with increasing cut level beyond this point.
+  
 
-```{r fit reduced treele, include = F}
+```{r fit reduced treelet, include = F}
 
 # Project selected components to get scores for each individual using the selected cut level
 # Cut level selected based on  cross validation and inspection of dendrogram
 
 # Original
-food_groups_tc_reduced <- TTVariances(food_groups_tree_full, cor(food_groups_scl), cut_level = 25, components = m)
+food_groups_tc_reduced <- TTVariances(food_groups_tree_full, cor(food_groups_scl), cut_level = 28, components = m)
 food_groups_tc_scores <- food_groups_scl %*% food_groups_tc_reduced$tc
 
 ### Add TC scores to main NHANES dataset
@@ -144,7 +154,11 @@ nh <- bind_cols(nhanes, as_tibble(food_groups_tc_scores)) %>%
   rename_at(vars(matches("^TC[0-9]{1,2}$")), ~paste0(., "_dec")) %>% 
   # Raw TC scores
   bind_cols(as_tibble(food_groups_tc_scores)) %>% 
-  inner_join(dietary, by = "SEQN")
+  inner_join(dietary, by = "SEQN") %>% 
+  
+  # Standardise age and KCAL to make predictions easier
+  mutate(RIDAGEYR = as.numeric(scale(RIDAGEYR)),
+         KCAL = as.numeric(scale(KCAL)))
 
 #food_groups_out <- bind_cols(diet, data.frame(food_groups_tc_scores))
 
@@ -157,9 +171,9 @@ food_groups_loadings <- food_groups_tc_reduced$tc %>%
 
 ```
 
-There was very little correlation among the TCs.
+TC1, TC3 and TC5 showed relatively broad distribution of scores. The remaining TCs had large spikes at the lower end of each distribution. These are likely to represent individuals that did not consume any of the food groups forming that TC. 
 
-```{r TC score distributions, echo=F}
+```{r TC score distributions}
 # Distribution of TC scores
 food_groups_tc_scores %>% 
   as_tibble() %>% 
@@ -169,34 +183,38 @@ food_groups_tc_scores %>%
   facet_wrap(~key, scales="free_x") + 
   theme_light() +
   labs(x = "TC score", y = "Frequency") + 
-  ggtitle("Distribution of Treelet Component scores")
+  ggtitle("Distribution of Treelet Component scores for food group analysis")
+```
 
+There was very little correlation among the TCs (Kendalls's tau was used due to the presence of ties).
+
+```{r TC-score-correlations}
 # Correlation of scores
 # fairly low correlation across scores
-food_groups_tc_cor <- cor(food_groups_tc_scores) %>% 
+food_groups_tc_cor <- cor(food_groups_tc_scores, method = "kendall") %>% 
   formatC(digits = 2, format = "f")
 food_groups_tc_cor[upper.tri(food_groups_tc_cor, diag = T)] <- ""
 kable(food_groups_tc_cor, caption = "Correlation of TC scores")
 
 ```
 
-Components TC1 and TC2 were broadly loaded but the others were sparse.
+Components TC1 was broadly loaded but the others were sparse indicating relatively discrete patterns of association among food groups.
 
-
-```{r TC loading distribution, echo = F}
+```{r TC loading distribution}
 # Number of non-zero loadings for each TC
 food_groups_loadings %>% 
   group_by(Component) %>% 
   summarise(`Non-zero scores` = sum(abs(Value) > 0)) %>% 
-  kable()
-
-
+  kable(caption = "Summary of loading patterns for Treelet components in food group analysis.")
 ```
+
+TC1 characterised diets high in salads, vegetables, poultry, seafood, fruits (but not fruit juices) and water or tea to drink. TC2 loaded on milk, ready-to-eat cereals and bananas (the breakfast TC). TC3 loaded on bread, luncheon meats and table fats, coffee and sugar (the coffee and sandwich TC). TC4 loaded on fruit juice drinks and fruit flavoured drinks (but not pure fruit juices). TC5 loaded on the same food groups as TC3 but represented a contrast between low intake of bread, meat and table fats and high intake of coffee and sugar (the coffee and no sandwich TC). TC6 loaded on beef, potatoes and beans and corn (the Mexican TC?). TC7 loaded on candy, crackers, pretzels and low calorie carbonated soft drinks (the snack TC). TC8 loaded on pancakes, eggs and French toast (the egg TC).
 
 ```{r treelet loading plots, fig.height=11, fig.width=7}
 ggplot(food_groups_loadings, aes(x = Variable, y = Value)) +
   facet_wrap(~Component, nrow = 1) +
   geom_bar(stat = "identity") + 
+  scale_y_continuous(breaks = c(0, 0.5)) +
   coord_flip() + 
   theme_light() +
   ggtitle("TC loading plot for analysis of food group intake")
@@ -206,7 +224,7 @@ ggplot(food_groups_loadings, aes(x = Variable, y = Value)) +
 
 ## Clinical attachment loss (CAL)
 
-Associations between TCs and CAL were assessed using Beta regression.
+Associations between TCs and CAL were assessed using a series of Beta regressions, as for nutrient intake.
 
 ```{r food group CAL beta regression, echo=F}
 nh$prop_CAL_sites3mm_beta <- PropTransform(nh$prop_CAL_sites3mm)
@@ -218,7 +236,7 @@ summary(fg1)
 
 ```
 
-High scores for TC1 associated with lower proportion of sites with CAL. High scores for TC5 and TC6 were associated with a greater proportion of sites with CAL. Gradients in risk across the range of each TC were in the region of 5-6% (TC1) and 3-4% (TC5 and TC6).
+High scores for TC1 and TC8 were associated with a lower proportion of sites with CAL. High scores for TC4 and TC7 were associated with a greater proportion of sites with CAL. 
 
 ```{r TC predictions from beta regression, echo =F}
 # Model to predict from
@@ -250,13 +268,825 @@ ggplot(aes(x = qtile, y = CAL_pred)) +
 
 ```
 
+Gradients in risk across the range of each TC were in the region of 10% (TC1) and 3-4% (TC4, TC7, TC8).
+
+```{r CAL TC age interaction models, include = F}
+fg2 <- update(fg1, .~. + RIDAGEYR:TC1 + RIDAGEYR:TC8 |., data = nh)
+summary(fg2)
+```
+
+```{r CAL-TC-variance models}
+fg3 <- update(fg1, .~.|. + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + TC7 + TC8 + TC9, data = nh)
+summary(fg3)
+
+```
+
+```{r CAL-TC-polynomial models, include = F}
+# # Quadratic fit
+fg4 <- update(fg3, .~. + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) + I(TC8^2) + I(TC9^2)  |. + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) + I(TC8^2) + I(TC9^2), data = nh)
+summary(fg4)
 
 
-```{r CAL TC polynomial models, include = F}
 # Cubic spline fit
 # cal5 <- update(cal4, .~. - TC1 - TC2 - TC3 - TC4 - TC5 - TC6 - TC7 + bs(TC1) + bs(TC2) + bs(TC3) + bs(TC4) + bs(TC5) + bs(TC6) + bs(TC7)|., data = nh)
 # summary(cal5)
-# # Quadratic fit
-# cal6 <- update(cal4, .~. + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) |., data = nh)
-# summary(cal6)
+```
+
+```{r modelling-deciles-explicitly}
+fg5 <- betareg(formula = prop_CAL_sites3mm_beta ~ RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec | RIDAGEYR + RIAGENDR + SMQ020 + diabetes, data = nh)
+summary(fg5)
+
+fg6 <- update(fg5, .~.|. + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec, data = nh)
+summary(fg6)
+```
+
+Standard logistic approach for the decile model was also fitted for comparison. The beta regression accounting for the heteroscedasticity was more conservative than the logistic model. 
+```{r CAL-logistic-regression}
+lg1 <- glm(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec, family = binomial(link = "logit"), weights = CAL_sites_assessed,  data = nh)
+summary(lg1)
+
+# Compare standard and beta regression parameters
+enframe(exp(coef(lg1)), value = "logistic_est") %>% 
+  inner_join(enframe(exp(coef(fg6)), value = "beta_est"), by = "name") %>% 
+  kable(caption = "Comparison of Odds ratios estimated using logistic and beta regression.")
+
+logLik(lg1)
+logLik(fg6)
+
+```
+
+There was strong evidence that the majority of both linear and quadratic terms for TCs were associated with CAL at $P<0.05$, indicating curvilinear relationships between TCs and CAL. However, many of the estimates were of small magnitude. The predicted range of CAL response was calculated for each TC to enable comparison of the magnitude of each association. Predictions were restricted to the between the 10th and 90th percentiles because at the extremes of the distribution back transformation from the logistic scale can lead to inflated slope estimates. 
+
+```{r CAL-predict-polynomial}
+# cal_pred_frame %>% 
+#   select(component, qtile) %>% 
+#   cbind(CAL_pred = predict(fg4, newdata = cal_pred_frame, type = "response")) %>% 
+# ggplot(aes(x = qtile, y = CAL_pred)) +
+#   geom_line() +
+#   facet_wrap(~component) +
+#   theme_light() +
+#   labs(y = expression("Proportion of sites with CAL">="3mm"), x = "Percentile of TC distribution") +
+#   ggtitle("Predicted extent of clinical attachment loss")
+# 
+
+cal_pred_frame %>% 
+  select(component, qtile) %>% 
+  cbind(CAL_pred = predict(fg4, newdata = cal_pred_frame, type = "response")) %>% 
+  filter(qtile >= 10, qtile <= 90) %>% 
+  group_by(Component = component) %>% 
+  summarise(`Prediction range (%)` = round((max(CAL_pred) -min(CAL_pred))*100, 1)) %>% 
+  kable(caption ="Prediction range of clinical attachment loss by treelet component.")
+
+```
+
+Only TC1 was associated with substantial variation in CAL, with proportion of sites with CAL decreasing with increasing TC1 score. Whilst capturing the underlying associations with the TCs, beta regression models systematically overestimated the proportion of sites with CAL. Therefore, measured proportions are most appropriate to illustrate the relationships between TCs and CAL.
+
+
+```{r comparison-of-actual-and-predicted,include=FALSE}
+cbind(nh, predicted = predict(fg4)) %>% 
+  ggplot(aes(x = prop_CAL_sites3mm_beta, y = predicted)) +
+  geom_point() +
+  geom_density2d()
+
+```
+
+
+```{r median-CAL-TC}
+ cbind(nh, CAL_pred = predict(fg4)) %>% 
+   group_by(`TC1 decile` = TC1_dec) %>% 
+   summarise("Median proportion of sites with CAL>=3mm" = round(median(prop_CAL_sites3mm), 2),
+             "Predicted proportion of sites with CAL>=3mm" = round(median(CAL_pred), 2))
+
+```
+
+
+```{r CAL-by-TC-scores}
+TC1_means <- nh %>% 
+  cbind(predicted_logistic = predict(lg1, type = "response"),
+          predicted_beta = predict(fg6)) %>% 
+  group_by(TC_decile = TC1_dec) %>% 
+  summarise(CAL_mean = mean(prop_CAL_sites3mm_beta),
+            CAL_mean_predicted_beta = mean(predicted_beta),
+            CAL_mean_predicted_logistic = mean(predicted_logistic))
+
+TC1_preds <- cbind(RIDAGEYR = mean(nh$RIDAGEYR), 
+       RIAGENDR = 1, 
+       SMQ020 = 2, 
+       diabetes = F,
+       KCAL = mean(nh$KCAL),
+       tc_qtx) %>% 
+  as_tibble()
+
+
+nh %>% 
+  select(prop_CAL_sites3mm, matches("_dec")) %>% 
+  gather(component, TC_decile, -prop_CAL_sites3mm) %>%
+  mutate(TC_decile = factor(TC_decile, levels = 1:10)) %>% 
+  filter(component == "TC1_dec") %>% 
+  ggplot(aes(x = TC_decile, y = prop_CAL_sites3mm)) +
+   geom_boxplot(outlier.shape = NA, fill = NA, notch = T) +
+  geom_point(data = TC1_means, mapping = aes(y = CAL_mean)) +
+  geom_point(data = TC1_means, mapping = aes(y = CAL_mean_predicted_beta), col = "red") +
+  geom_point(data = TC1_means, mapping = aes(y = CAL_mean_predicted_logistic), col = "blue") +
+#  facet_wrap(~component) +
+   theme_light() +
+  labs(y = expression("Proportion of sites with CAL">="3mm"), x = "Decile of TC distribution") +
+  ggtitle("Extent of clinical attachment loss")
+
+  
+```
+```{r compare predicted distributions}
+hist(nh$prop_CAL_sites3mm, col = "red")
+hist(predict(lg1, type = "response"), add = T)
+hist(predict(fg6, type = "response"), add = T, density = 50)
+
+
+
+```
+
+
+The magnitude of the gradient in CAL with TC1 was compared with other factors included in the regression model. The raw difference in medians for gender was `r summarise(filter(nh, RIAGENDR == 1), median(prop_CAL_sites3mm)) - summarise(filter(nh, RIAGENDR == 2), median(prop_CAL_sites3mm))`. The difference in medians for smoking was `r summarise(filter(nh, SMQ020 == 1), median(prop_CAL_sites3mm)) - summarise(filter(nh, SMQ020 == 2), median(prop_CAL_sites3mm))`. Thus, the unadjusted variation in CAL proportion associated with TC1 was of similar magnitude to that associated with smoking and gender.
+
+```{r predict-conditional-CAL, include=FALSE}
+predict(fg4, new.data = expand.grid(RIDAGEYR = mean(nh$RIDAGEYR),
+            RIAGENDR = c(1,2),
+            SMQ020 = c(1,2),
+            diabetes = c(T,F),
+            KCAL = mean(nh$KCAL)))
+
+```
+
+The difference in predicted proportion (i.e. the conditional difference without averaging across all other variables) between the 10th and 90th quantile of TC1 was `r as.numeric(round(invlogit(coef(fg4)[1] + coef(fg4)["TC1"] * 0.1) - invlogit(coef(fg4)[1] + coef(fg4)["TC1"] * 0.9), 4))`. The difference in predicted CAL proportion between males and females was `r as.numeric(round(invlogit(coef(fg4)[1]) - invlogit(coef(fg4)[1] + coef(fg4)["RIAGENDR"]), 4))`. The difference between never smokers and ever smokers was `r as.numeric(round(invlogit(coef(fg4)[1]) - invlogit(coef(fg4)[1] + coef(fg4)["SMQ020"]), 4))`. Thus the conditional variation in predicted CAL proportions for TC1 was approximately half that predicted for gender or smoking status. Taken together these results indicate that a proportion of the difference in CAL associated with TC1 in the univariate analysis is explained by differences in diet by gender and smoking status.
+
+
+Because the distribution of the outcome variable is so strongly right skewed, modelling the median may be more meaningful. 
+
+```{r quantile-regression}
+# Regression on the median not the mean
+rq1 <- quantreg::rq(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + 
+     TC7 + TC8 + TC9, tau = 0.5, data = nh)
+summary(rq1)
+
+rq2 <- update(rq1, ~. + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) + I(TC8^2) + I(TC9^2), data = nh)
+summary(rq2)
+
+rq3 <- quantreg::rq(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec, tau = 0.5, data = nh)
+
+```
+
+Although the robust logistic quantile regression was a good fit to the data, the backtransformed median estimates appeared two high so producing a conditional plot of the TC and other variable effect sizes is not done. This may because the baseline group for each TC is 1 which may not be a realistic point from which to predict.
+
+
+```{r robust-quantile-regression, include = F}
+# Robust logistic quantile regression using 'lqr' package
+rob_mod <- ~ 1 + RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec
+
+# Excluding KCAL
+rob_mod <- ~ 1 + RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec
+
+# Model the median
+rob1 <- Log.lqr(y = nh$prop_CAL_sites3mm, 
+            x = model.matrix(rob_mod, data = nh),
+     p = 0.5)
+
+rob1_coef <- bind_cols(term = colnames(model.matrix(rob_mod, data = nh)),
+        as_tibble(rob1$table, .name_repair = "minimal")) %>% 
+  mutate(OR = exp(Estimate),
+         # Why are these values so high?
+    pred_median = invlogit(ifelse(term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)))
+
+# Model the lower quartile
+rob1_lower <- Log.lqr(y = nh$prop_CAL_sites3mm, 
+            x = model.matrix(rob_mod, data = nh),
+     p = 0.25) 
+
+# Model the upper quartile
+rob1_upper <- Log.lqr(y = nh$prop_CAL_sites3mm, 
+            x = model.matrix(rob_mod, data = nh),
+     p = 0.75) 
+
+
+model.matrix(rob_mod, data = nh)[2,] %*% rob1$beta
+invlogit(rob1$fitted.values[2])
+
+```
+
+```{r predictions-from-robust-regression}
+# Predict at the mean age and KCAL, male, non-smoker, all TCs at decile 5
+rob_pred_frame <- model.matrix(rob_mod, data = nh)[1,] %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(RIDAGEYR = 0,
+         RIAGENDR = 1,
+         SMQ020 = 2, 
+         diabetesTRUE = 0#,
+         #KCAL = 0) %>% 
+  ) %>% 
+  mutate_at(vars(matches("_dec")), function(.){0}) %>% 
+  mutate_at(vars(matches("_dec5")), function(.){1}) 
+
+invlogit(as.numeric(rob_pred_frame) %*% rob1$beta)
+
+# TC1 at decile 6
+rob_pred_frame %>% 
+  mutate(TC1_dec5 = 0,
+         TC1_dec6 = 1) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+
+# TC1 at decile 1
+rob_pred_frame %>% 
+  mutate(TC1_dec5 = 0) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit() 
+
+# TC1 at decile 10
+rob_pred_frame %>% 
+  mutate(TC1_dec5 = 0,
+         TC1_dec10 = 1) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit() 
+
+# 17.2% reduction (conditional)
+
+# Age at 5th percentile
+rob_pred_frame %>% 
+  mutate(RIDAGEYR = quantile(nh$RIDAGEYR, 0.05)) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+# Age at 95th percentile
+rob_pred_frame %>% 
+  mutate(RIDAGEYR = quantile(nh$RIDAGEYR, 0.95)) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+
+
+# Age at mean + xx years
+rob_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh$RIDAGEYR[nhanes$RIDAGEYR == round(mean(nhanes$RIDAGEYR)) + 17])) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit() -
+# Age at mean
+  invlogit(as.numeric(rob_pred_frame) %*% rob1$beta)
+
+# Age at given years
+rob_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh$RIDAGEYR[nhanes$RIDAGEYR == 40])) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+rob_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh$RIDAGEYR[nhanes$RIDAGEYR == 64])) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+# Compare with diabetes effect
+rob_pred_frame %>% 
+  mutate(diabetesTRUE = 1) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+# Smoking effect
+rob_pred_frame %>% 
+  mutate(SMQ020 = 1) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+# Gender effect
+rob_pred_frame %>% 
+  mutate(RIAGENDR = 2) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+
+
+# TC7 at decile 1
+rob_pred_frame %>% 
+  mutate(TC7_dec5 = 0) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()
+
+# TC1 at decile 10
+rob_pred_frame %>% 
+  mutate(TC7_dec5 = 0,
+         TC7_dec10 = 1) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit() 
+
+
+
+kable(rob1_coef, caption = "Estimates from robust logistic quantile regression on CAL.")
+
+
+```
+
+The TC1 effect is larger than smoking, diabetes and gender effects, and equivalent to an 
+  
+```{r robust-logistic-linear-quantile}
+
+rob_mod_lin <- ~ 1 + RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + 
+     TC7 + TC8 + TC9
+
+# Model the median
+rob2 <- Log.lqr(y = nh$prop_CAL_sites3mm, 
+            x = model.matrix(rob_mod_lin, data = nh),
+     p = 0.5)
+
+rob2_coef <- bind_cols(term = colnames(model.matrix(rob_mod_lin, data = nh)),
+        as_tibble(rob2$table, .name_repair = "minimal")) %>% 
+  mutate(OR = exp(Estimate),
+         # Why are these values so high?
+    pred_median = invlogit(ifelse(term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)))
+
+# Decile model is much better
+rob2$AIC
+rob1$AIC
+
+```
+
+```{r robust-logistic-regresion-including-KCAL}  
+rob_mod_kcal <- ~ 1 + RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + KCAL + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec + TC8_dec + TC9_dec
+
+# Model the median
+rob3 <- Log.lqr(y = nh$prop_CAL_sites3mm, 
+            x = model.matrix(rob_mod_kcal, data = nh),
+     p = 0.5)
+
+rob3_coef <- bind_cols(term = colnames(model.matrix(rob_mod_kcal, data = nh)),
+        as_tibble(rob3$table, .name_repair = "minimal")) %>% 
+  mutate(OR = exp(Estimate),
+         # Why are these values so high?
+    pred_median = invlogit(ifelse(term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)))
+
+
+kable(rob3_coef, caption = "Estimates from robust logistic quantile regression on CAL including KCAL.")
+
+```
+
+# Interactions between TCs and other variables
+
+There were no interactions between TC1 and age or gender. For TC7 there was no interaction with age. Althought there was no evidence for a gender interaction, the TC7 effect disappeared when the additional terms were included so this may partially reflect gender differences in food choice.
+
+```{r robust-logistic-regresion-including-KCAL}  
+rob_mod4 <- ~ 1 + RIDAGEYR + RIAGENDR + 
+     SMQ020 + diabetes + TC1_dec*RIAGENDR + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+     TC7_dec*RIAGENDR + TC8_dec + TC9_dec
+
+# Model the median
+rob4 <- Log.lqr(y = nh$prop_CAL_sites3mm, 
+            x = model.matrix(rob_mod4, data = nh),
+     p = 0.5)
+
+rob4_coef <- bind_cols(term = colnames(model.matrix(rob_mod4, data = nh)),
+        as_tibble(rob4$table, .name_repair = "minimal")) %>% 
+  mutate(OR = exp(Estimate),
+         # Why are these values so high?
+    pred_median = invlogit(ifelse(term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)))
+
+
+kable(rob4_coef, caption = "Estimates from robust logistic quantile regression on CAL including KCAL.")
+
+```
+
+
+Note that the intercept is age zero so a downward trend in the 
+
+```{r logistic-CDF-quantile-regression}
+#  lrq0 <- cdfquantreg(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + SMQ020 + diabetes + KCAL | RIDAGEYR + RIAGENDR + SMQ020 + diabetes,  fd = "logit", sd = "logistic", data = as.data.frame(nh))
+#  summary(lrq0) 
+# 
+# lrq1 <- cdfquantreg(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + SMQ020 + diabetes + KCAL 
+#                      + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + TC7 + TC8 + TC9  
+#                                | RIDAGEYR + RIAGENDR + SMQ020 + diabetes,
+#       fd = "logit", sd = "logistic", data = as.data.frame(nh))
+# summary(lrq1)
+# 
+# 
+#  lrq2 <- cdfquantreg(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + SMQ020 + diabetes + KCAL 
+#                      + TC1_dec  | RIDAGEYR + RIAGENDR + SMQ020 + diabetes,
+#       fd = "logit", sd = "logistic", data = as.data.frame(nh))
+# summary(lrq2)
+# # Slow 11:40
+#  lrq3 <- cdfquantreg(prop_CAL_sites3mm ~ RIDAGEYR + RIAGENDR + SMQ020 + diabetes + KCAL 
+#                      + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + TC7_dec + TC8_dec + TC9_dec 
+#                      | RIDAGEYR + RIAGENDR + SMQ020 + diabetes,
+#       fd = "logit", sd = "logistic", data = as.data.frame(nh))
+# # | RIDAGEYR + RIAGENDR + 
+# #      SMQ020 + diabetes + TC1_dec + TC2_dec + TC3_dec + TC4_dec + TC5_dec + TC6_dec + 
+# #      TC7_dec + TC8_dec + TC9_dec, 
+# summary(lrq3)
+# 
+
+hist(nh$prop_CAL_sites3mm, col = "red")
+#hist(predict(lrq1), add = T)
+hist(invlogit(rob1$fitted.values), add = T, density = 50)
+#hist(invlogit(rob2$fitted.values), add = T)
+
+```
+
+
+The CDF quantile regressions tend to overpredict at the extremes
+
+
+```{r median-plot}
+TC1_medians <- nh %>% 
+  cbind(predicted_rq = predict(rq3),
+  #  predicted_lrq = predict(lrq1),
+    predicted_rob = invlogit(rob1$fitted.values),
+    
+    predicted_lower_rob = invlogit(rob1_lower$fitted.values),
+    predicted_upper_rob = invlogit(rob1_upper$fitted.values)
+ # , predicted_rob_lin = invlogit(rob2$fitted.values)
+  ) %>% 
+  group_by(TC_decile = TC1_dec) %>% 
+  summarise(CAL_median = median(prop_CAL_sites3mm),
+            CAL_median_predicted_rq = median(predicted_rq),
+   #         CAL_median_predicted_lrq = median(predicted_lrq),
+            CAL_median_predicted_rob = median(predicted_rob),
+            
+            CAL_lower_predicted_rob = median(predicted_lower_rob),
+            CAL_upper_predicted_rob = median(predicted_upper_rob)
+  # , CAL_median_rob_lin = median(predicted_rob_lin)
+  )
+
+nh %>% 
+  select(prop_CAL_sites3mm, matches("_dec")) %>% 
+  gather(component, TC_decile, -prop_CAL_sites3mm) %>%
+  mutate(TC_decile = factor(TC_decile, levels = 1:10)) %>% 
+  filter(component == "TC1_dec") %>% 
+  ggplot(aes(x = TC_decile, y = prop_CAL_sites3mm)) +
+   geom_boxplot(outlier.shape = NA, fill = NA, notch = T) +
+  #geom_point(data = TC1_medians, mapping = aes(y = CAL_median)) +
+  geom_point(data = TC1_medians, mapping = aes(y = CAL_median_predicted_rq), col = "red") +
+  #geom_point(data = TC1_medians, mapping = aes(y = CAL_median_predicted_lrq), col = "blue") +
+  geom_point(data = TC1_medians, mapping = aes(y = CAL_median_predicted_rob), shape = 21, colour = "black", fill = "green") +
+  
+  geom_point(data = TC1_medians, mapping = aes(y = CAL_lower_predicted_rob), shape = 21, colour = "black", fill = "green") +
+  geom_point(data = TC1_medians, mapping = aes(y = CAL_upper_predicted_rob), shape = 21, colour = "black", fill = "green") +
+  
+  #geom_point(data = TC1_medians, mapping = aes(y = CAL_median_rob_lin), shape = 21, colour = "black", fill = "yellow") +
+  
+  #facet_wrap(~component) +
+   theme_light() +
+  labs(y = expression("Proportion of sites with CAL">="3mm"), x = "Decile of TC distribution") +
+  ggtitle("Extent of clinical attachment loss")
+
+```
+
+
+```{r age-by-CAL}
+age_medians <- nh %>% 
+  cbind(predicted_rq = predict(rq3),
+#    predicted_lrq = predict(lrq1),
+    predicted_rob = invlogit(rob1$fitted.values)) %>% 
+  mutate(age_dec = ntile(RIDAGEYR, 10)) %>% 
+  group_by(age_dec) %>% 
+  summarise(CAL_median = median(prop_CAL_sites3mm),
+            CAL_median_predicted_rq = median(predicted_rq),
+            #CAL_median_predicted_lrq = median(predicted_lrq),
+            CAL_median_predicted_rob = median(predicted_rob))
+
+
+age_lower <- nh %>% 
+  cbind(predicted_rob = invlogit(rob1_lower$fitted.values)) %>% 
+  mutate(age_dec = ntile(RIDAGEYR, 10)) %>% 
+  group_by(age_dec) %>% 
+  summarise(CAL_lower_predicted_rob = median(predicted_rob))
+
+age_upper <- nh %>% 
+  cbind(predicted_rob = invlogit(rob1_upper$fitted.values)) %>% 
+  mutate(age_dec = ntile(RIDAGEYR, 10)) %>% 
+  group_by(age_dec) %>% 
+  summarise(CAL_upper_predicted_rob = median(predicted_rob))
+
+
+
+nh %>% 
+  mutate(age_dec = ntile(RIDAGEYR, 10)) %>% 
+  ggplot(aes(x = age_dec, y = prop_CAL_sites3mm, group = age_dec)) +
+  geom_boxplot() +
+  #geom_violin()+
+  #geom_point(data = age_medians, mapping = aes(y = CAL_median)) +
+  geom_point(data = age_medians, mapping = aes(y = CAL_median_predicted_rq), col = "red") +
+#  geom_point(data = age_medians, mapping = aes(y = CAL_median_predicted_lrq), col = "blue") +
+  geom_point(data = age_medians, mapping = aes(y = CAL_median_predicted_rob), shape = 21, colour = "black", fill = "green") +
+  
+  geom_point(data = age_lower, mapping = aes(y = CAL_lower_predicted_rob), shape = 21, colour = "black", fill = "green") +
+  geom_point(data = age_upper, mapping = aes(y = CAL_upper_predicted_rob), shape = 21, colour = "black", fill = "green") +
+  theme_light()
+
+```
+
+```{r medians-other-variables}
+nh %>% 
+  group_by(diabetes) %>% 
+  summarise(CAL_median = median(prop_CAL_sites3mm))
+
+nh %>% 
+  group_by(RIAGENDR) %>% 
+  summarise(CAL_median = median(prop_CAL_sites3mm))
+
+nh %>% 
+  group_by(SMQ020) %>% 
+  summarise(CAL_median = median(prop_CAL_sites3mm))
+
+
+```
+
+
+
+It is by not means clear that the standard quantile regression is even valid here as it does not obey the constraints of the outcome variable (it is similar to fitting a simple linear regression to proportion data).
+
+## Cohort characteristics by treelet component scores   
+
+We explored this further by summarising the characteristics of cohort members by TC scores. TC1 and TC7 clearly proxies for gender.
+
+```{r characteristics-by-TC-quantile}
+perc <- scales::percent_format()
+nh %>% 
+  group_by(`TC1 decile` = TC1_dec) %>% 
+  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
+            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
+            Diabetes = perc(sum(diabetes)/length(diabetes)),
+            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
+  knitr::kable(caption = "Distribution of individual characteristics by TC1 decile.")
+
+nh %>% 
+  group_by(`TC4 decile` = TC4_dec) %>% 
+  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
+            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
+            Diabetes = perc(sum(diabetes)/length(diabetes)),
+            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
+  knitr::kable(caption = "Distribution of individual characteristics by TC4 decile.")
+
+nh %>% 
+  group_by(`TC7 decile` = TC7_dec) %>% 
+  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
+            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
+            Diabetes = perc(sum(diabetes)/length(diabetes)),
+            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
+  knitr::kable(caption = "Distribution of individual characteristics by TC7 decile.")
+
+nh %>% 
+  group_by(`TC8 decile` = TC8_dec) %>% 
+  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
+            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
+            Diabetes = perc(sum(diabetes)/length(diabetes)),
+            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
+  knitr::kable(caption = "Distribution of individual characteristics by TC8 decile.")
+
+
+
+ggplot(nh, aes(x = as_factor(RIAGENDR), y = TC7)) +
+  geom_boxplot(notch = T)
+
+```
+
+```{r image-correlations-among-TCs}
+ggplot(nh, aes(x = TC1, y = TC7)) +
+  geom_density2d() +
+  facet_wrap(~RIAGENDR)
+
+```
+
+Contrast intake of the various beverages by TC score
+
+
+
+## Diet profiles by treelet component scores    
+To gain insight into the magnitude of the dietary variation captured by the TC scores, individuals were classified into quintiles for each TC. For each TC of interest, average daily consumption (g/day) was calculated for each food group with a non-negative loading for that TC.
+
+```{r food-group-daily-intake, include = F}
+# Join the daily intake values to the individual characteristics (including the TC scores and deciles)
+daily_intake <- nh %>%
+  inner_join(food_grps_grms_per_day %>% 
+               gather(grp_code, grms, -SEQN), by = "SEQN")
+
+# Function to extract daily intake by food groups and deciles for a given TC
+# Args:
+# daily_intake = tibble with daily intake in grams
+# TC = number of TC to extract
+# decile_column = name of column with deciles to group by
+ExtractTCIntake <- function(daily_intake, TC, decile_column){
+  dec_col <- enquo(decile_column)
+  daily_intake %>% 
+  # Select only those food groups with a non zero score for the TC of interest
+  inner_join(food_groups_loadings %>% 
+               filter(Component == paste0("TC", TC), Value != 0) %>%  
+             mutate(grp_code = as.character(Variable)),
+             by = "grp_code") %>% 
+  # Calculate summary statistics for each decile and food group
+  group_by(!!dec_col, Variable) %>% 
+  # Proportion with any intake 
+   summarise(any_intake = round(sum(grms>0)/length(grms), digits = 2),
+             # Median intake among those with any intake
+             grms_intake = round(median(grms[grms>0]))) %>% 
+  ungroup()
+}
+
+# TC 1
+ExtractTCIntake(daily_intake, 1, TC1_dec) %>% 
+  transmute(TC1_dec, `Food group` = Variable, intake = paste0(any_intake, " (", grms_intake, ")")) %>% 
+  spread(TC1_dec, intake) %>% 
+  
+  knitr::kable(caption = "Daily intake of food groups by TC1 decile. Proportion with any intake (median among those with any intake, g/day.")
+```
+
+
+```{r TC1-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC1 decile."}
+ggplot(ExtractTCIntake(daily_intake, 1, TC1_dec), aes(y = Variable, x = TC1_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC1 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+```
+
+```{r TC4-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC4 decile."}
+ggplot(ExtractTCIntake(daily_intake, 4, TC4_dec), aes(y = Variable, x = TC4_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC4 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+```
+
+```{r TC7-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC7 decile."}
+ggplot(ExtractTCIntake(daily_intake, 7, TC7_dec), aes(y = Variable, x = TC7_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC7 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+```
+
+```{r TC8-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC8 decile."}
+ggplot(ExtractTCIntake(daily_intake, 8, TC8_dec), aes(y = Variable, x = TC8_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC8 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+```
+
+How much of the nutrients by the TC score?
+
+
+## Nutrient profiles by treelet component scores
+```{r nutrients-by-TC, fig.width=8, fig.height = 12}
+nh %>% select(SEQN, TC1_dec) %>% 
+  inner_join(dietary, by = "SEQN") %>% 
+  gather("Nutrient", "intake", -SEQN, -TC1_dec) %>% 
+  group_by(TC1_dec, Nutrient) %>% 
+  # Proportion with any intake 
+   summarise(any_intake = round(sum(intake>0)/length(intake), digits = 2),
+             # Median intake among those with any intake
+             grms_intake = round(median(intake[intake>0]))) %>% 
+  ungroup() %>% 
+  ggplot(aes(y = Nutrient, x = TC1_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC1 decile") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+
+nh %>% select(SEQN, TC4_dec) %>% 
+  inner_join(dietary, by = "SEQN") %>% 
+  gather("Nutrient", "intake", -SEQN, -TC4_dec) %>% 
+  group_by(TC4_dec, Nutrient) %>% 
+  # Proportion with any intake 
+   summarise(any_intake = round(sum(intake>0)/length(intake), digits = 2),
+             # Median intake among those with any intake
+             grms_intake = round(median(intake[intake>0]))) %>% 
+  ungroup() %>% 
+  ggplot(aes(y = Nutrient, x = TC4_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC4 decile") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+
+
+nh %>% select(SEQN, TC7_dec) %>% 
+  inner_join(dietary, by = "SEQN") %>% 
+  gather("Nutrient", "intake", -SEQN, -TC7_dec) %>% 
+  group_by(TC7_dec, Nutrient) %>% 
+  # Proportion with any intake 
+   summarise(any_intake = round(sum(intake>0)/length(intake), digits = 2),
+             # Median intake among those with any intake
+             grms_intake = round(median(intake[intake>0]))) %>% 
+  ungroup() %>% 
+  ggplot(aes(y = Nutrient, x = TC7_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC7 decile") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+
+
+```
+
+There appears to be as strong correlation between TC scores and overall quantity of food intake. Those in the top decile of TC1 consume considerably more `KCAL` than those in the bottom decile. Therefore, although the TCs do not explicitly contain KCAL, and it is adjusted for in the regression, the signal appears to remain. 
+
+
+
+```{r kcal-by-TC1}
+nh %>% 
+  select(SEQN, TC1_dec) %>% 
+  inner_join(nhanes, by = "SEQN") %>% 
+  ggplot(aes(x = TC1_dec)) +
+  geom_violin(aes(y = KCAL))
+  
+```
+
+
+```{r correlation-energy-and-grams-intake}
+
+with(food_total_grms_per_day %>% 
+  inner_join(nh, by = "SEQN"), 
+  cor.test(GRMS, KCAL))
+
+food_total_grms_per_day %>% 
+  inner_join(nh, by = "SEQN") %>% 
+  ggplot(aes(x = GRMS, y = KCAL)) +
+  geom_point() +
+  geom_density_2d()
+  #geom_histogram()
+  
+
+
+
+```
+
+An interesting feature of the analysis is the association between high TC7 scores and reduced risk of CAL. TC7 loads on just three food groups: BEV242 (low calorie carbonated soft drinks), SUGAR2 (candy) and GRAIN5 (crackers, popcorn, pretzels, corn chips). 
+
+
+What is absent - not drinking 
+
+```{r correlations-among-drinks}
+food_groups_nhanes %>% 
+    select(matches("BEV|WATER")) %>% 
+  cor() %>% 
+  kable(caption = "Correlation among drink variables.", digits = 2)
+
+
+# Calculate proportions in each drink type
+nh %>% 
+  inner_join(food_groups_nhanes %>% 
+    select(SEQN, matches("BEV|WATER")) %>% 
+  gather(beverage, grms, -SEQN) %>% 
+  group_by(SEQN) %>% 
+  summarise(prop242 = grms[beverage=="BEV242"]/sum(grms)), by = "SEQN") %>% 
+  
+  group_by(TC7_dec) %>% 
+  summarise(mean(prop242))
+  
+  # ggplot(aes(x = TC7_dec, y = prop242)) +
+  # geom_violin()
+
+
+bev <- nh %>% 
+  select(SEQN, TC7_dec) %>% 
+  inner_join(food_groups_nhanes %>% 
+               select(SEQN, matches("BEV|WATER"))             , by = "SEQN") %>% 
+    gather(beverage, grms, -SEQN, -TC7_dec)
+
+
+bev %>%   
+  group_by(TC7_dec) %>% 
+  summarise(intake_dec = sum(grms)) %>% 
+  inner_join(  bev %>% 
+   group_by(TC7_dec, beverage) %>% 
+  mutate(intake_bev = sum(grms)),
+  by = "TC7_dec")
+  
+  
+  # summarise(intake = mean(grms),
+  #           intake_prop = sum(grms)) %>% 
+
+  summarise(intake_tot = sum(grms)/intake_dec) %>% 
+
+  ggplot(aes(x = TC7_dec, y = intake_tot)) +
+  geom_col(aes(fill = beverage))
+
+   
+   
 ```

@@ -1,9 +1,6 @@
 # Nutrient intake and periodontal disease {#nutrient}
-Chapter completed **2019-11-03**.
-```{r checkpoint setup, include = FALSE}
-library(checkpoint)
-checkpoint("2019-03-11")
-
+Chapter compiled **`r Sys.Date()`**
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 library(here)
@@ -17,19 +14,17 @@ library(splines)
 library(broom)
 ```
 
-
-
 These notes describe analysis of associations between dietary nutrient intake and periodontal outcomes. Data were drawn from NHANES waves F to H (2009/10 to 2013/14). These waves were selected because they included full mouth periodontal examinations (waves A to C had only half mouth examinations).
 
 
 ## Cohort construction
 
-```{r prepare modelling dataset, include=FALSE, cache=T}
+```{r prepare modelling dataset, include=FALSE, cache=F}
 source(here("Code", "diet_periodontal.R"))
 source(here("Code", "helper_functions.R"))
 ```
 
-A total of 30,468 participants were interviewed across the three waves of interest. Following a previous study of periodontal outcomes using NHANES data (Billings et al), the cohort was restricted to those aged >= 30 years (n = 14,556). Those that did not undergo a medical examination were excluded, leaving a total of 14,071 individuals. Edentate individuals were excluded leaving 11,399 individuals. Those excluded from the periodontal examination for medical reasons were also excluded from the cohort, leaving 11,088 individuals. Individuals in which a periodontal exam was not complete were also excluded, leaving 10,706 individuals. Those with no sites assessed for either pocket depth or clinical attachment loss were excluded, leaving 10,680. Finally, individuals without valid dietary data were excluded leaving a total of `r nrow(nhanes)` individuals in the cohort.
+A total of 30,468 participants were interviewed across the three waves of interest. Following a previous study of periodontal outcomes using NHANES data [@billings_age-dependent_2018], the cohort was restricted to those aged $\geq30$ years (n = 14,556). Those that did not undergo a medical examination were excluded, leaving a total of 14,071 individuals. Edentate individuals were excluded leaving 11,399 individuals. Those excluded from the periodontal examination for medical reasons were also excluded from the cohort, leaving 11,088 individuals. Individuals in which a periodontal exam was not complete were also excluded, leaving 10,706 individuals. Those with no sites assessed for either pocket depth or clinical attachment loss were excluded, leaving 10,680. Finally, individuals without valid dietary data were excluded leaving a total of `r nrow(nhanes)` individuals in the cohort.
 
 ## Nutrient intake data
 
@@ -45,9 +40,9 @@ A major challenge in analysing nutrient intake data (and dietary data in general
 
 Common approaches to address these problems are to use stepwise methods to select variables for inclusion or to mathematically transform the input data, attempting to represent the major features in fewer dimensions. PCA is the most widely used dimension reduction technique, finding the axes that explain the greatest variation in the input data and calculating the assocations between each variable and these axes to produce factor loadings. PCA has the disadvantage that for each of the principal components extracted there are the same number of factor loadings as there are input variables, so a large number of parameters must still be interpreted. Potentially important patterns may be missed if only variables with the largest loadings for each axis are discussed.
 
-Treelet transformation (TT) is a recently developed technique designed to reduce dimensionality whilst also providing a more easily intepretable set of outputs. It has been applied to dietary data in a small number of studies, a notable example being Assi et al. (2016) where it was used to identify associations between dietary patterns and risk of breast cancer in the EPIC dataset.
+Treelet transformation (TT) is a recently developed technique designed to reduce dimensionality whilst also providing a more easily intepretable set of outputs. It has been applied to dietary data in a small number of studies, a notable example being Assi et al. ( @assi_treelet_2016 ) where it was used to identify associations between nutrient patterns and risk of breast cancer in the EPIC dataset.
 
-TT is a hybrid of hierarchical clustering and PCA, where variables are clustered if they have high covariance (or correlation, depending on the research question). At each stage of the algorithm the two variables with the highest covariance/correlation are replaced by the results of a PCA on these two variables alone. The resulting variable retains the major features of the originals and can then be clustered with other variables (either raw or PCA) at later stages. The end result is a hierarchical cluster tree, with correlated variables close to each other. For each cluster a treelet component (TC) is produced, a representation of the patterns within that cluster analagous to a Principal Component of just the variables within that cluster. Factor loadings for variables outside the cluster are set to zero so the overall representation is sparse, with very few factor loadings to interpret for each TC. Gorst-Rasmussen et al. (2011) provide a useful comparison of the outputs of TT and PCA for extracting dietary patterns.
+TT is a hybrid of hierarchical clustering and PCA, where variables are clustered if they have high covariance (or correlation, depending on the research question). At each stage of the algorithm the two variables with the highest covariance/correlation are replaced by the results of a PCA on these two variables alone. The resulting variable retains the major features of the originals and can then be clustered with other variables (either raw or PCA) at later stages. The end result is a hierarchical cluster tree, with correlated variables close to each other. For each cluster a treelet component (TC) is produced, a representation of the patterns within that cluster analagous to a Principal Component of just the variables within that cluster. Factor loadings for variables outside the cluster are set to zero so the overall representation is sparse, with very few factor loadings to interpret for each TC. Gorst-Rasmussen et al. ( @gorst-rasmussen_exploring_2011 ) provide a useful comparison of the outputs of TT and PCA for extracting dietary patterns.
 
 TCs can also be nested, with a single input variable being part of both a local cluster and also a higher level grouping of variables. The same variable may have different loading for each TC of which it is part.
 
@@ -107,7 +102,7 @@ diet_loadings <- diet_tc_reduced$tc %>%
 
 The first stage of the TT analysis was to construct the hierarchical cluster tree. It was decided that total energy intake `KCAL` should be excluded from the cluster tree and instead directly adjusted for when modelling periodontal outcomes.
 
-Tree construction began by standardising all nutrient intake variables so factor loadings can be compared on a common scale. The resulting `r ncol(diet_scl)` by `r ncol(diet_scl)` correlation matrix for these variables was used as the input for the treelet algorithm, which was implemented in the `R` package `treelet`. 
+Tree construction began by standardising all nutrient intake variables so factor loadings can be compared on a common scale. The resulting `r ncol(diet_scl)` by `r ncol(diet_scl)` correlation matrix for these variables was used as the input for the treelet algorithm, which was implemented in the @R-base package @R-treelet. 
 
 
 
@@ -139,9 +134,9 @@ diet_tc_reduced$tcv %>%
   kable(digits = 2)
 ```
 
-Having selected the number of TCs to report, the level at which to cut the cluster tree (i.e. the stage of the clustering algorithm) was selected by cross validation. Cutting the tree close to the branches gives a representation similar to the original data but which might yield to TCs that capture only fragments of the patterns within the data. Cutting the tree close to the root may capture the major patterns but at the expense of too many factor loadings to interpret (as for PCA).
+Having selected the number of TCs to report, the level at which to cut the cluster tree (i.e. the stage of the clustering algorithm) was selected by cross validation. Cutting the tree close to the branches gives a representation similar to the original data but which might yield TCs that capture only fragments of the patterns within the data. Cutting the tree close to the root may capture the major patterns but at the expense of too many factor loadings to interpret (as for PCA).
 
-The treelet cross validation procedure is described in Newton et al. (2012). Briefly, the performance of the TCs in explaining variance in the input data is compared across a range of different cut levels. The level at which there is little additional improvement in cross validation scores is selected as the optimum cut level. For the nutrient intake dataset there was little improvement in scores above level 50 and so this was chosen as the cut point.
+The treelet cross validation procedure is described in Newton et al. ( @newton_stata_2012 ). Briefly, the performance of the TCs in explaining variance in the input data is compared across a range of different cut levels. The level at which there is little additional improvement in cross validation scores is selected as the optimum cut level. For the nutrient intake dataset there was little improvement in scores above level 50 and so this was chosen as the cut point.
 
 
 ```{r treelet cross validation plot, echo=F}
@@ -156,9 +151,9 @@ apply(cvs, 1, mean) %>%
 
 ```
 
-There was variation among TCs showed variation in dispersion and skewness. FOr example, TC1 had a broad right skewed distribution whereas TC6 had a much narrower distribution. Treelet components are not orthogonal (in contrast to PCA) but correlations among TC scores in the nutrient dataset was low. The largest correlation was between TC1 and TC5 with r = `r round(max(cor(diet_tc_scores)[lower.tri(cor(diet_tc_scores), diag = F)]), digits = 2)`.
+There was variation among TCs in dispersion and skewness. For example, TC1 had a broad right skewed distribution whereas TC6 had a much narrower distribution. Treelet components are not orthogonal (in contrast to PCA) but correlations among TC scores in the nutrient dataset was low. The largest correlation was between TC1 and TC5 with r = `r round(max(cor(diet_tc_scores)[lower.tri(cor(diet_tc_scores), diag = F)]), digits = 2)`.
 
-```{r TC score distributions, echo=F}
+```{r TC-score-distributions, echo=F}
 # Distribution of TC scores
 diet_tc_scores %>% 
   as_tibble() %>% 
@@ -182,7 +177,7 @@ kable(diet_tc_cor, caption = "Correlation of TC scores")
 
 Factor loadings were extracted for each of the 7 TCs. These can be interpreted in the same way as PCA factor loadings, with a large positive (or negative) loading for a variable indicating that high scores for the TC are associated with high (or low) levels of that variable.
 
-Three of the components (TC1, TC3, TC4) loaded on 30 or more variables each, indicating patterns spanning broad overlapping clusters of nutrients. Other TCs were focussed on much smaller clusters of nutrients consumed together. TC1 and TC4 overlapped completely but were uncorrelated, indicating that there were two distinct dietary patterns based on the same set of variables.    
+Three of the components (TC1, TC3, TC4) loaded on 30 or more variables each, indicating patterns spanning broad overlapping clusters of nutrients. Other TCs were focussed on much smaller clusters of nutrients consumed together. TC1 and TC4 overlapped completely but were uncorrelated, indicating that there were two distinct nutrient patterns based on the same set of variables.    
 
 
 ```{r TC loading distribution, echo = F}
@@ -195,7 +190,7 @@ diet_loadings %>%
 
 ```
 
-Those with high TC1 scores showed moderate elevations across a total of 41 nutrients, including fatty acids, fats, sugars, carbohydraes and B vitamins. TC2 was quite different, loading strongly on only vitamin D and four specific fatty acids. TC3 was another broadly based component, this time representing a contrast between elevated intake of iron, folate and B vitamins combined with lower than average intake of fats, cholesterol and fatty acids. TC4 was based on the same variables as TC1 and was characterised by very high intake of 6 individual fatty acids and slightly lower than average intake of the remaining nutrients. TC5 consisted of high intake of vitamins A and B12, retinol and copper. TC6 consisted of high intake of alpha and beta carotene, lutein and zeaxanthin and vitamin K. TC7 represented a contrast between high intake of potassium, magnesium, fibre and folate (from food) and low intakes of vitamins B2, B6, iron and folate from other sources.   
+Those with high TC1 scores showed moderate elevations across a total of 41 nutrients, including fatty acids, fats, sugars, carbohydrates and B vitamins. TC2 was quite different, loading strongly on only vitamin D and four specific fatty acids. TC3 was another broadly based component, this time representing a contrast between elevated intake of iron, folate and B vitamins combined with lower than average intake of fats, cholesterol and fatty acids. TC4 was based on the same variables as TC1 and was characterised by very high intake of 6 individual fatty acids and slightly lower than average intake of the remaining nutrients. TC5 consisted of high intake of vitamins A and B12, retinol and copper. TC6 consisted of high intake of alpha and beta carotene, lutein and zeaxanthin and vitamin K. TC7 represented a contrast between high intake of potassium, magnesium, fibre and folate (from food) and low intakes of vitamins B2, B6, iron and folate from other sources.   
 
 
 ```{r treelet loading plots, echo = F, fig.height=11, fig.width=7}
@@ -214,7 +209,7 @@ ggplot(diet_loadings, aes(x = Variable, y = Value)) +
 
 In addition to the nutrient intake information included in the TCs, the following variables were available for each individual. These have been previously associated with periodontal outcomes and were adjusted for in subsequent models.Total energy intake `KCAL` was included at this point.
 
-```{r list of variables, echo=F}
+```{r list-of-variables, echo=F}
 # Variables to adjust for
 adj_vars <- c("RIDAGEYR", "RIAGENDR", "SMQ020", "diabetes", "KCAL")
 enframe(names(nhanes)) %>% 
@@ -227,9 +222,9 @@ enframe(names(nhanes)) %>%
 
 ## Clinical attachment loss (CAL)
 
-The second stage of the analysis was to estimate associations between the patterns of nutrient intake represented by the TCs and periodontal outcomes. The primary outcome was a measure of tooth clinical attachment loss, an indicator of chronic Periodontal disease. For a maximum of six sites surrounding each tooth the distances in mm between the free gingival margin and the cemento-enamel junction (CEJ) and between the free gingival margin and the sulcus base (pocket depth, PD) were measured. These two distances were differenced to produce a measure of clinical attachment loss at each site. In accordance with reporting guidelines for periodontal outcomes (Holtfreter et al., 2015), extent of CAL for each individual was measured in terms of a) the proportion of sites with CAL $\geq$ 3mm and b) the mean CAL over all sites assessed.  
+The second stage of the analysis was to estimate associations between the patterns of nutrient intake represented by the TCs and periodontal outcomes. The primary outcome was a measure of tooth clinical attachment loss, an indicator of chronic periodontal disease. For a maximum of six sites surrounding each tooth the distances in mm between the free gingival margin and the cemento-enamel junction (CEJ) and between the free gingival margin and the sulcus base (pocket depth, PD) were measured. These two distances were differenced to produce a measure of clinical attachment loss at each site. In accordance with reporting guidelines for periodontal outcomes (Holtfreter et al., @holtfreter_standards_2015 ), extent of CAL for each individual was measured in terms of a) the proportion of sites with CAL $\geq$ 3mm and b) the mean CAL over all sites assessed.  
 
-The distribution of the number of sites assessed was multimodal with peaks corresponding to assessment of all six sites for the number of teeth present. Approximately 75% of individuals had $\geq120$ sites assessed corresponding to full assessments for $\geq20$ teeth.
+The distribution of the number of sites assessed was multimodal with peaks corresponding to assessment of all six sites for the number of teeth present. Approximately 75% of individuals had $\geq120$ sites assessed corresponding to full assessments for $\geq20$ teeth.   
 
 ```{r CAL sites assessed, echo = F}
 CAL_sites_assessed <- nh %>% 
@@ -252,7 +247,7 @@ CAL_sites_assessed <- nh %>%
 
 ```
 
-The distribution of the proportion of sites with CAL$\geq$3mm was strongly right skewed; the median number of sites showing  CAL$\geq$3mm$ was `r median(nh$CAL_sites3mm)`. 
+The distribution of the proportion of sites with CAL$\geq$3mm was strongly right skewed; the median number of sites showing  CAL $\geq3mm$ was `r median(nh$CAL_sites3mm)`.     
 
 ```{r CAL extent distribution, echo = F}
 ggplot(nh, aes(x = prop_CAL_sites3mm)) +
@@ -281,14 +276,13 @@ ggplot(nh, aes(x = prop_CAL_sites3mm)) +
 ```
 
 Beta regression was used to estimate associations between TCs and CAL, adjusting for age, gender, smoking status, diabetes status and total energy intake. Beta regression was chosen because it allows flexible modelling of outcomes constrained to the (0,1) interval (e.g. proprotions*) whilst allowing for the excess variation often encountered using such data that is not well accounted for using logistic models. Extended forms of Beta regression allows fitting of joint models that simultaneously estimate associations between explanatory variables and both the mean and variance of the outcome variable.
-Alternative techniques for dealing with excess variation (overdispersion) include quasi-binomial models or multilevel models with individual-level random effects but these lack the flexibility to model the ways in which explanatory variables may be associated with outcome variance. Beta regression models were implemented using the `betareg` package in `R` (Cribari-Neto and Zeileis, 2010). 
+Alternative techniques for dealing with excess variation (overdispersion) include quasi-binomial models or multilevel models with individual-level random effects but these lack the flexibility to model the ways in which explanatory variables may be associated with outcome variance. Beta regression models were implemented using the @R-betareg package in @R-base. 
 
 *A small transformation of the input data was made so that the extreme values 0 and 1 were brought within the (0,1) interval for modelling.
 
 A series of base models was fitted including just the adjustment variables, to choose an appropriate structure for the precision sub-model (i.e. to determine whether any were associated with outcome variance and so should be explicitly modelled). 
 
 ```{r CAL precision models, echo = F}
-
 # Transform the proportion of CAL sites so that all values lie within the interval (0,1) for beta regression
 nh$prop_CAL_sites3mm_beta <- PropTransform(nh$prop_CAL_sites3mm)
 
@@ -303,7 +297,8 @@ cal3 <- update(cal2, .~. |.-KCAL, data = nh)
 summary(cal3)
 
 ```
-The best model was a variable dispersion model in which all of the adjustment variables were included in the precision sub-model except for `KCAL`. This model had substantially lower BIC than a constant dispersion model (BIC = `r BIC(cal3)` and BIC = `r BIC(cal1)` repectively).
+
+The best model was a variable dispersion model in which all of the adjustment variables were included in the precision sub-model except for `KCAL`. This model had substantially lower BIC than a constant dispersion model (BIC = `r round(BIC(cal3))` and BIC = `r round(BIC(cal1))` respectively).
 
 In the mean submodel, greater age and diabetes were associated with increased extent of CAL. Females (`RIAGENDR` = 1 = male, `RIAGENDR` = 2 = female) had lesser CAL extent than males and non-smokers had lesser extent than smokers  (`SMQ020` = 1 = ever smoked, `SMQ020` = 2 = never smoked). There was no evidence for an association between total energy intake and CAL extent. In the precision submodel, greater age and diabetes were associated with decreased precision (i.e. increased dispersion) of the CAL extent measure (proportion of sites with CAL). There was increased precision (decreased dispersion) among females and non-smokers.
 
@@ -330,12 +325,12 @@ format(exp(cbind(coef(cal4), coef(cal4bc), coef(cal4br))), digits = 4)
 
 ```
 
-Additional models were fitted with polynomial terms for the TCs (cubic splines and quadratic terms) but the most parsimonious model remained the linear fit (BICs of `r BIC(cal4)`, `r BIC(cal5)`, `r BIC(cal6)` for the linear, spline and quadratic fits respecitvely).  
+Additional models were fitted with polynomial terms for the TCs (cubic splines and quadratic terms) but the most parsimonious model remained the linear fit (BICs of `r round(BIC(cal4))`, `r round(BIC(cal5))`, `r round(BIC(cal6))` for the linear, spline and quadratic fits respecitvely).  
 
 
 Predicted values from the linear fit captured the skewed nature of the outcome distribution but under-predicted at the tails.
 
-```{r overall predictions from beta regression}
+```{r overall predictions from beta regression, echo = FALSE}
 
 # Predicted values
 ggplot(enframe(predict(cal4)), aes(x = value)) +
@@ -346,7 +341,7 @@ ggplot(enframe(predict(cal4)), aes(x = value)) +
 
 ```
 
-Predictions across the ranges of each TC revealed the relative magnitude of the associations with CAL, with the majority of the variation in CAL associated with `TC1`. Predictions were made representing a male, non-smoker of age `r mean(nhanes$RIDAGEYR)` with no diabetes. There was a predicted decrease in the proprtion of sites with CAL of more than 10% across the range of `TC1` scores. 
+Predictions across the ranges of each TC revealed the relative magnitude of the associations with CAL, with the majority of the variation in CAL associated with TC1. Predictions were made representing a male, non-smoker of age `r round(mean(nhanes$RIDAGEYR))` with no diabetes. There was a predicted decrease in the proprtion of sites with CAL of more than 10% across the range of TC1 scores. 
 
 ```{r TC predictions from beta regression, echo =F}
 # Model to predict from
@@ -380,7 +375,7 @@ ggplot(aes(x = qtile, y = CAL_pred)) +
 
 ### Varying the cut-level of the cluster tree 
 
-A limitation of the initial analysis was that much of the variation was explained by `TC1` and so there still remained a large number of factor loading to interpret for this component, making it difficult to infer which nutrients were responsible for variation in CAL. A second analysis was conducted, cutting the cluster tree closer to the leaves (level 40) and retain nine rather than seven components in an attempt to separate some of the elements in `TC1`. 
+A limitation of the initial analysis was that much of the variation was explained by TC1 and so there still remained a large number of factor loadings to interpret for this component, making it difficult to infer which nutrients were responsible for variation in CAL. A second analysis was conducted, cutting the cluster tree closer to the leaves (level 40) and retain nine rather than seven components in an attempt to separate some of the elements in TC1. 
 
 ```{r second treelet analysis, include = F}
 ## Second treelet analysis, varying the number of components and cut levels
@@ -403,8 +398,6 @@ diet_loadings2 <- diet_tc_reduced2$tc %>%
 
 ```
 
-The modified decomposition retained at cut level 40 demonstrated reasonably good cross validation performance, indicating that the majority of variation in nutrient distribution was captured by the model. `TC2` had a much broader distribution than in the original analysis, indicating that some of the variation associated with `TC1` had been spread to it. However, cutting the tree at this level increases the correlation between TCs.
-
 ```{r second treelet cross validation, echo = F}
 apply(cvs2, 1, mean) %>% 
   enframe() %>%
@@ -416,6 +409,8 @@ apply(cvs2, 1, mean) %>%
   labs(x = "Cut level", y = "Cross validation score")
 
 ```
+
+The modified decomposition retained at cut level 40 demonstrated reasonably good cross validation performance, indicating that the majority of variation in nutrient distribution was captured by the model. TC2 had a much broader distribution than in the original analysis, indicating that some of the variation associated with TC1 had been spread to it. However, cutting the tree at this level increased the correlation between TCs.
 
 ```{r second TC score distributions, echo=F}
 # Distribution of TC scores
@@ -439,7 +434,7 @@ kable(diet_tc_cor2, caption = "Correlation of TC scores, cut level 40")
 
 ```
 
-As expected, the new TCs were more sparsely loaded, with 17 and 13 non-zero loadings in `TC1` and `TC2` respectively. `TC1` appeared to load heavily on high intake of fats and `TC2` on fibre and minerals. `TC3` was associated with high intake of five fatty acids and `TC4` with vitamins A, B12, retinol and copper. `TC5` loaded on high intake of three fatty acids, `TC6` on high intake of vitamin K and lutein/zeaxantin. `TC7` was associated with high intake of sugar and carbohydrates and `TC8` was associated with high intake of alpha and beta carotene. `TC9` loaded on the same nutrients as `TC2` but represented a contrast between high fibre intake and lower than average intake of the vitamins and minerals in this group.
+As expected, the new TCs were more sparsely loaded, with 17 and 13 non-zero loadings for TC1 and TC2 respectively. TC1 appeared to load heavily on high intake of fats and TC2 on fibre and minerals. TC3 was associated with high intake of five fatty acids and TC4 with vitamins A, B12, retinol and copper. TC5 loaded on high intake of three fatty acids, TC6 on high intake of vitamin K and lutein/zeaxantin. TC7 was associated with high intake of sugar and carbohydrates and TC8 was associated with high intake of alpha and beta carotene. TC9 loaded on the same nutrients as TC2 but represented a contrast between high fibre intake and lower than average intake of the vitamins and minerals in this group.
 
 
 ```{r second treelet loading plots, echo = F, fig.height=11, fig.width=7}
@@ -460,7 +455,7 @@ ggplot(diet_loadings2, aes(x = Variable, y = Value)) +
 
 ```
 
-A similar modelling exercise was conducted, and inclusion of linear terms only was associated with the most parsimonious fit. In this analysis, high scores for `TC1`, `TC2`, `TC3` and `TC9` were associated with reduced proportion of sites with CAL. There was greater variation in CAL was assocated with `TC2` than `TC1`, indicating that fibre is potentially of greater imporance than fat intake. The negative association between `TC9` and CAL provides further evidence for the importance of fibre intake.
+A similar modelling exercise was conducted, and inclusion of linear terms only was associated with the most parsimonious fit. In this analysis, high scores for TC1, TC2, TC3 and TC9 were associated with reduced proportions of sites with CAL. Greater variation in CAL was assocated with TC2 than TC1, indicating that fibre is potentially of greater imporance than fat intake. The negative association between TC9 and CAL provides further evidence for the importance of fibre intake.
 
 ```{r second analysis CAL TC models, echo = F}
 cal7 <- update(cal4, .~. + TC8 + TC9 |., data = nh2)

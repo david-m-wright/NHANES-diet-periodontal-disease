@@ -21,7 +21,7 @@ smoking <- list.files(path = here("NHANES"), pattern = "SMQ", recursive = T, ful
 demographic <- list.files(path = here("NHANES"), pattern = "DEMO", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
   bind_rows() %>% 
-  select(SEQN, SDDSRVYR, RIDSTATR, RIAGENDR, RIDAGEYR)
+  select(SEQN, SDDSRVYR, RIDSTATR, RIAGENDR, RIDAGEYR, INDFMPIR, DMDEDUC2)
 
 
 ## Diabetes data ##
@@ -92,5 +92,10 @@ food_grps_grms_per_day <- food_grps_grms_per_day %>%
   # Only records for cohort members
   inner_join(select(nhanes, SEQN), by = "SEQN")
   
+
+food_total_grms_per_day <- food_total_grms_per_day %>% 
+  # Only records for cohort members
+  inner_join(select(nhanes, SEQN), by = "SEQN")
+
 
 cat("\n Cohort prepared")

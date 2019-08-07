@@ -5,7 +5,7 @@ date: "Book generated: `r Sys.Date()`"
 site: bookdown::bookdown_site
 output: bookdown::gitbook
 documentclass: book
-bibliography: [packages.bib]
+bibliography: [packages.bib, diet_periodontal_references.bib]
 biblio-style: apalike
 link-citations: yes
 #github-repo: rstudio/bookdown-demo
@@ -19,6 +19,6 @@ These notes describe analysis of NHANES dietary and periodontal data.
 ```{r include=FALSE}
 # automatically create a bib database for R packages
 knitr::write_bib(c(
-  .packages(), 'bookdown', 'knitr', 'rmarkdown'
+  .packages(), 'bookdown', 'knitr', 'rmarkdown', 'treelet', 'betareg'
 ), 'packages.bib')
 ```
