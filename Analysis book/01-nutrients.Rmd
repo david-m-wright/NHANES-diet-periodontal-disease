@@ -40,9 +40,9 @@ A major challenge in analysing nutrient intake data (and dietary data in general
 
 Common approaches to address these problems are to use stepwise methods to select variables for inclusion or to mathematically transform the input data, attempting to represent the major features in fewer dimensions. PCA is the most widely used dimension reduction technique, finding the axes that explain the greatest variation in the input data and calculating the assocations between each variable and these axes to produce factor loadings. PCA has the disadvantage that for each of the principal components extracted there are the same number of factor loadings as there are input variables, so a large number of parameters must still be interpreted. Potentially important patterns may be missed if only variables with the largest loadings for each axis are discussed.
 
-Treelet transformation (TT) is a recently developed technique designed to reduce dimensionality whilst also providing a more easily intepretable set of outputs. It has been applied to dietary data in a small number of studies, a notable example being Assi et al. ( @assi_treelet_2016 ) where it was used to identify associations between nutrient patterns and risk of breast cancer in the EPIC dataset.
+Treelet transformation (TT) is a recently developed technique designed to reduce dimensionality whilst also providing a more easily intepretable set of outputs. It has been applied to dietary data in a small number of studies, a notable example being  @assi_treelet_2016 where it was used to identify associations between nutrient patterns and risk of breast cancer in the EPIC dataset.
 
-TT is a hybrid of hierarchical clustering and PCA, where variables are clustered if they have high covariance (or correlation, depending on the research question). At each stage of the algorithm the two variables with the highest covariance/correlation are replaced by the results of a PCA on these two variables alone. The resulting variable retains the major features of the originals and can then be clustered with other variables (either raw or PCA) at later stages. The end result is a hierarchical cluster tree, with correlated variables close to each other. For each cluster a treelet component (TC) is produced, a representation of the patterns within that cluster analagous to a Principal Component of just the variables within that cluster. Factor loadings for variables outside the cluster are set to zero so the overall representation is sparse, with very few factor loadings to interpret for each TC. Gorst-Rasmussen et al. ( @gorst-rasmussen_exploring_2011 ) provide a useful comparison of the outputs of TT and PCA for extracting dietary patterns.
+TT is a hybrid of hierarchical clustering and PCA, where variables are clustered if they have high covariance (or correlation, depending on the research question). At each stage of the algorithm the two variables with the highest covariance/correlation are replaced by the results of a PCA on these two variables alone. The resulting variable retains the major features of the originals and can then be clustered with other variables (either raw or PCA) at later stages. The end result is a hierarchical cluster tree, with correlated variables close to each other. For each cluster a treelet component (TC) is produced, a representation of the patterns within that cluster analagous to a Principal Component of just the variables within that cluster. Factor loadings for variables outside the cluster are set to zero so the overall representation is sparse, with very few factor loadings to interpret for each TC.  @gorst-rasmussen_exploring_2011 provide a useful comparison of the outputs of TT and PCA for extracting dietary patterns.
 
 TCs can also be nested, with a single input variable being part of both a local cluster and also a higher level grouping of variables. The same variable may have different loading for each TC of which it is part.
 
@@ -102,7 +102,7 @@ diet_loadings <- diet_tc_reduced$tc %>%
 
 The first stage of the TT analysis was to construct the hierarchical cluster tree. It was decided that total energy intake `KCAL` should be excluded from the cluster tree and instead directly adjusted for when modelling periodontal outcomes.
 
-Tree construction began by standardising all nutrient intake variables so factor loadings can be compared on a common scale. The resulting `r ncol(diet_scl)` by `r ncol(diet_scl)` correlation matrix for these variables was used as the input for the treelet algorithm, which was implemented in the @R-base package @R-treelet. 
+Tree construction began by standardising all nutrient intake variables so factor loadings can be compared on a common scale. The resulting `r ncol(diet_scl)` by `r ncol(diet_scl)` correlation matrix for these variables was used as the input for the treelet algorithm, which was implemented in the `R` package [@R-base] package `treelet` [@R-treelet]. 
 
 
 
@@ -136,7 +136,7 @@ diet_tc_reduced$tcv %>%
 
 Having selected the number of TCs to report, the level at which to cut the cluster tree (i.e. the stage of the clustering algorithm) was selected by cross validation. Cutting the tree close to the branches gives a representation similar to the original data but which might yield TCs that capture only fragments of the patterns within the data. Cutting the tree close to the root may capture the major patterns but at the expense of too many factor loadings to interpret (as for PCA).
 
-The treelet cross validation procedure is described in Newton et al. ( @newton_stata_2012 ). Briefly, the performance of the TCs in explaining variance in the input data is compared across a range of different cut levels. The level at which there is little additional improvement in cross validation scores is selected as the optimum cut level. For the nutrient intake dataset there was little improvement in scores above level 50 and so this was chosen as the cut point.
+The treelet cross validation procedure is described in  @newton_stata_2012 . Briefly, the performance of the TCs in explaining variance in the input data is compared across a range of different cut levels. The level at which there is little additional improvement in cross validation scores is selected as the optimum cut level. For the nutrient intake dataset there was little improvement in scores above level 50 and so this was chosen as the cut point.
 
 
 ```{r treelet cross validation plot, echo=F}
@@ -247,7 +247,7 @@ CAL_sites_assessed <- nh %>%
 
 ```
 
-The distribution of the proportion of sites with CAL$\geq$3mm was strongly right skewed; the median number of sites showing  CAL $\geq3mm$ was `r median(nh$CAL_sites3mm)`.     
+The distribution of the proportion of sites with CAL $\geq$ 3mm was strongly right skewed; the median number of sites showing  CAL $\geq$ 3mm was `r median(nh$CAL_sites3mm)`.     
 
 ```{r CAL extent distribution, echo = F}
 ggplot(nh, aes(x = prop_CAL_sites3mm)) +
@@ -276,7 +276,7 @@ ggplot(nh, aes(x = prop_CAL_sites3mm)) +
 ```
 
 Beta regression was used to estimate associations between TCs and CAL, adjusting for age, gender, smoking status, diabetes status and total energy intake. Beta regression was chosen because it allows flexible modelling of outcomes constrained to the (0,1) interval (e.g. proprotions*) whilst allowing for the excess variation often encountered using such data that is not well accounted for using logistic models. Extended forms of Beta regression allows fitting of joint models that simultaneously estimate associations between explanatory variables and both the mean and variance of the outcome variable.
-Alternative techniques for dealing with excess variation (overdispersion) include quasi-binomial models or multilevel models with individual-level random effects but these lack the flexibility to model the ways in which explanatory variables may be associated with outcome variance. Beta regression models were implemented using the @R-betareg package in @R-base. 
+Alternative techniques for dealing with excess variation (overdispersion) include quasi-binomial models or multilevel models with individual-level random effects but these lack the flexibility to model the ways in which explanatory variables may be associated with outcome variance. Beta regression models were implemented using the @R-betareg package in `R`. 
 
 *A small transformation of the input data was made so that the extreme values 0 and 1 were brought within the (0,1) interval for modelling.
 

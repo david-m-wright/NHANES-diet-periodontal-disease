@@ -2,15 +2,13 @@
 .Rhistory
 .RData
 .Ruserdata
-
 NHANES/
 Output/
 Archived code/
-
 Analysis notes/
 !Analysis notes/diet_periodontal_analysis.Rmd
 !Analysis notes/food_groups_periodontal_analysis.Rmd
-
 Analysis book/_book
 Analysis book/_bookdown_files
-
+Papers
+Workspaces
