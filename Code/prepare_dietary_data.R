@@ -78,24 +78,34 @@ dietary <- dietary %>%
 food1 <- list.files(path = here("NHANES"), pattern = "DR1IFF_[A-Z]{1}.XPT", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
   bind_rows() %>% 
-  transmute(SEQN, FDCD = DR1IFDCD, DR1IGRMS, DRDINT) %>% 
+  transmute(SEQN, FDCD = DR1IFDCD, 
+            DR1ISUGR, 
+            DR1ICARB,
+            DR1IGRMS, DRDINT) %>% 
   # Remove rows with no grams (human milk)
   filter(!is.na(DR1IGRMS)) %>% 
   # Sum total intake on day 1
   group_by(SEQN, FDCD, DRDINT) %>% 
-  summarise(DR1IGRMS = sum(DR1IGRMS))
+  summarise(DR1IGRMS = sum(DR1IGRMS),
+            DR1ICARB = sum(DR1ICARB),
+            DR1ISUGR = sum(DR1ISUGR))
 
 
 # Second day intake
 food2 <- list.files(path = here("NHANES"), pattern = "DR2IFF_[A-Z]{1}.XPT", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
   bind_rows() %>% 
-  transmute(SEQN, FDCD = DR2IFDCD, DR2IGRMS, DRDINT) %>% 
+  transmute(SEQN, FDCD = DR2IFDCD, 
+            DR2ISUGR,
+            DR2ICARB,
+            DR2IGRMS, DRDINT) %>% 
   # Remove rows with no grams (human milk)
   filter(!is.na(DR2IGRMS)) %>% 
   # Sum total intake on day 2
   group_by(SEQN, FDCD, DRDINT) %>% 
-  summarise(DR2IGRMS = sum(DR2IGRMS))
+  summarise(DR2IGRMS = sum(DR2IGRMS),
+            DR2ISUGR = sum(DR2ISUGR),
+            DR2ICARB = sum(DR2ICARB))
 
 
 # # Average intake across days 
@@ -171,27 +181,43 @@ food_grp1 <- food1 %>%
                select(DRXFDCD, grp_code), 
              by = c("FDCD" = "DRXFDCD")) %>% 
   group_by(SEQN, DRDINT,grp_code) %>% 
-  summarise(DR1IGRMS = sum(DR1IGRMS))
+  summarise(DR1IGRMS = sum(DR1IGRMS),
+            DR1ICARB = sum(DR1ICARB),
+            DR1ISUGR = sum(DR1ISUGR))
 
 food_grp2 <- food2 %>% 
   inner_join(fdd %>% 
                select(DRXFDCD, grp_code), 
              by = c("FDCD" = "DRXFDCD")) %>% 
   group_by(SEQN, DRDINT, grp_code) %>% 
-  summarise(DR2IGRMS = sum(DR2IGRMS))
+  summarise(DR2IGRMS = sum(DR2IGRMS),
+            DR2ICARB = sum(DR2ICARB),
+            DR2ISUGR = sum(DR2ISUGR))
 
 
 # Average intake across days 
-food_grps_grms_per_day <- food_grp1 %>% 
+food_grps_per_day <- food_grp1 %>% 
   full_join(food_grp2, by = c("SEQN", "grp_code", "DRDINT")) %>% 
   # Take the mean if an individual was measured on both days, 
-  mutate_at(c("DR1IGRMS", "DR2IGRMS"), function(.){if_else(is.na(.), 0, .)}) %>% 
+  mutate_at(c("DR1IGRMS", "DR2IGRMS", "DR1ISUGR","DR2ISUGR", "DR1ICARB", "DR2ICARB"), function(.){if_else(is.na(.), 0, .)}) %>% 
   # Otherwise take the existing value (the parallel maximum here)
-  mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS))) %>% 
-  ungroup() %>% 
-  select(SEQN, grp_code, GRMS) %>% 
-  # Wide format
+  mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS)),
+         CARB = if_else(DRDINT == 2, (DR1ICARB + DR2ICARB)/2, pmax(DR1ICARB, DR2ICARB)),
+         SUGR = if_else(DRDINT == 2, (DR1ISUGR + DR2ISUGR)/2, pmax(DR1ISUGR, DR2ISUGR))) %>% 
+  ungroup()
+
+# Wide format
+food_grps_grms_per_day <- food_grps_per_day %>% 
+    select(SEQN, grp_code, GRMS) %>% 
   spread(grp_code, GRMS, fill = 0) 
+
+# food_grps_carbs_per_day <- food_grps_per_day %>% 
+#   select(SEQN, grp_code, CARB) %>% 
+#   spread(grp_code, CARB, fill = 0) 
+# 
+# food_grps_sugars_per_day <- food_grps_per_day %>% 
+#   select(SEQN, grp_code, SUGR) %>% 
+#   spread(grp_code, SUGR, fill = 0) 
 
 
 # Total intake (not grouped)

@@ -10,7 +10,7 @@ require(here)
 # dat = data.frame to be renamed
 # Value: data.frame with renamed variables
 DropPerioPrefix <- function(dat){
-    dat %>% rename_at(vars(matches("OHA|OHD|OHX")), funs(str_replace(., "OHA|OHD|OHX", "")))
+    dat %>% rename_at(vars(matches("OHA|OHD|OHX")), list(~str_replace(., "OHA|OHD|OHX", "")))
 }
 
 

@@ -46,6 +46,10 @@ food_groups_nhanes <- food_grps_grms_per_day %>%
          matches("VEG(1|2|3|4|5|6|7|8)$"),
          WATER1)
 
+# List of groups of beverages included
+bevs_included <- names(select(food_groups_nhanes, matches("BEV|WATER")))
+
+
 fgrp %>% 
   select(grp_code, grp_description) %>% 
   distinct() %>%
@@ -526,7 +530,6 @@ kable(rob1_coef, caption = "Estimates from robust logistic quantile regression o
 
 
 ```{r predictions-from-robust-regression, include = F}
-
 # TC1 at decile 6
 rob_pred_frame %>% 
   mutate(TC1_dec5 = 0,
@@ -626,7 +629,7 @@ rob_pred_frame %>%
 
 ```
 
-Combining the conditional estimates to make predictions for some representative groups, the decrease in median proportion of sites with CAL between TC1 decile 1 (`r round(tc1_dec1, 2)`%) and TC1 decile 10 (`r round(tc1_dec10, 2)`) was `r round(tc1_dec1 - tc1_dec10, 2)`%. An equivalent change would be expected with decrease in age from 59 to 45 years. For TC7, the decrease from decile 1 (`r round(tc7_dec1, 2)`%) to decile 10 (`r round(tc7_dec10)`%) was equivalent to a decrease in age from 59 to 47 years. It was notable that the decrease in CAL only occured in deciles five and above of TC7.
+Combining the conditional estimates to make predictions for some representative groups, the decrease in median proportion of sites with CAL between TC1 decile 1 (`r round(tc1_dec1, 2)`%) and TC1 decile 10 (`r round(tc1_dec10, 2)`%) was equivalent to the change expected with decrease in age from 59 to 45 years. For TC7, the decrease from decile 1 (`r round(tc7_dec1, 2)`%) to decile 10 (`r round(tc7_dec10)`%) was equivalent to a decrease in age from 59 to 47 years. It was notable that the decrease in CAL only occured in deciles five and above of TC7.
 
 
 ```{r medians-other-variables, include = FALSE}
@@ -642,12 +645,45 @@ nh %>%
   group_by(SMQ020) %>% 
   summarise(CAL_median = median(prop_CAL_sites3mm))
 
+```
+
+## Cohort characteristics by treelet component scores   
+We summarised the characteristics of cohort members by deciles of TC1 and TC7 to determine whether these diets are associated with particular demographic groups. 
+
+There was a clear association between the gender and TC1 with males overrepresented in deciles 1 to 5 and females overrepresented in deciles 6 to 10 (almost 70% in decile 10 were female). Likelihood of ever having smoked decreased with increasing TC1 decile. There was no consistent association between diabetes and TC1 and no substantial variation in age among TC1 deciles.
+
+```{r characteristics-by-TC1-quantile}
+perc <- scales::percent_format()
+nh %>% 
+inner_join(nhanes %>% 
+             select(SEQN, Age = RIDAGEYR), by = "SEQN") %>% 
+    group_by(`TC1 decile` = TC1_dec) %>% 
+  summarise(Age = paste0(round(mean(Age)), " (", round(sd(Age), digits = 1), ")"),
+            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
+            Diabetes = perc(sum(diabetes)/length(diabetes)),
+            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
+  knitr::kable(caption = "Distribution of individual characteristics by TC1 decile.")
+```
+
+There was no evidence of associations between TC7 and age, diabetes or smoking status. There was some indication that males were overrepresented in deciles 1 to 5 and females in 6 to 10 but this pattern was not as strong as that observed for TC1.
+
+```{r characteristics-by-TC7-quantile}
+nh %>% 
+inner_join(nhanes %>% 
+             select(SEQN, Age = RIDAGEYR), by = "SEQN") %>% 
+  group_by(`TC7 decile` = TC7_dec) %>% 
+  summarise(Age = paste0(round(mean(Age)), " (", round(sd(Age), digits = 1), ")"),
+            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
+            Diabetes = perc(sum(diabetes)/length(diabetes)),
+            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
+  knitr::kable(caption = "Distribution of individual characteristics by TC7 decile.")
 
 ```
 
+In summary, both TC1 and TC7 captured variation between male and female diets, although it should be noted that the regression models quantified variation in CAL by the TCs independent of gender and the other adjustment variables.
 
 ## Diet profiles by treelet component scores    
-To gain insight into the magnitude of the dietary variation captured by the TC scores, average daily consumption (g/day) was calculated for each food group with a non-zero loading for each TC.
+To gain insight into the magnitude of the dietary variation captured by the TC scores, average daily consumption (g/day) was calculated by TC decile for each food group with a non-zero loading for each TC. These plots highlight two aspects of the TCs, the proportion of people in each decile consuming any of the food groups on the survey dates and the median quantity consumed among those that did consume. 
 
 ```{r food-group-daily-intake, include = F}
 # Join the daily intake values to the individual characteristics (including the TC scores and deciles)
@@ -685,6 +721,7 @@ ExtractTCIntake <- function(daily_intake, TC, decile_column){
 #   knitr::kable(caption = "Daily intake of food groups by TC1 decile. Proportion with any intake (median among those with any intake, g/day.")
 ```
 
+For TC1 the most commonly consumed items were water, tomatoes (`VEG4`) and 'other vegetables' (`VEG8`). The largest gradients in proportion consumed were found for lettuce (`VEG5`) and salad dressings (`FAT2`).
 
 ```{r TC1-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC1 decile."}
 ggplot(ExtractTCIntake(daily_intake, 1, TC1_dec), aes(y = Variable, x = TC1_dec)) +
@@ -695,6 +732,8 @@ ggplot(ExtractTCIntake(daily_intake, 1, TC1_dec), aes(y = Variable, x = TC1_dec)
   theme_minimal()
 ```
 
+The greatest variation in the proportion of individuals consuming a food group for TC7 was for `GRAIN5` (crackers, popcorn, pretzels, corn chips). The sample was split 60/40 into those that consumed these items and those that did not. There was a also a strong gradient of increased quantities consumed, with the median in decile 10 more than five times that in decile 5. Half of the sample consumed no or negligible quantities of low calorie carbonated soft drinks. There was a more than four-fold increase in median quantity consumed from decile 5 to decile 10. A similar pattern was observed for candy (`SUGAR2`) although the quantities consumed were much smaller.
+
 ```{r TC7-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC7 decile.", warning=FALSE}
 ggplot(ExtractTCIntake(daily_intake, 7, TC7_dec), aes(y = Variable, x = TC7_dec)) +
   geom_tile(aes(fill = any_intake)) +
@@ -704,8 +743,73 @@ ggplot(ExtractTCIntake(daily_intake, 7, TC7_dec), aes(y = Variable, x = TC7_dec)
   theme_minimal()
 ```
 
+Finding an association between hight TC7 scores and reduced risk of CAL was surprising given that the three food groups involved are not considered healthy and the sugars in candy might be expected to have a direct detrimental effect on oral health. A possible hypothesis explaining the observed patterns is that reduced CAL risk was driven by food groups *not* consumed in the higher TC7 deciles but not highly correlated with any of the groups within TC7. Drinks were considered as a candidate and the strongest correlation among all drink groups was the negative one between `BEV242` (in TC7) and `BEV241` (regular carbonated soft drinks). Other correlations with regular carbonated drinks include with regular fruit juices and fruit flavoured drinks `BEV231` (-ve) and with water (-ve).
+   
+
+```{r correlations-among-drinks}
+food_groups_nhanes %>% 
+    select(matches("BEV|WATER")) %>% 
+  cor() %>% 
+  # cor(method = "kendall") %>% 
+  kable(caption = "Correlation among drink variables.", digits = 2)
+```
+
+Daily intake of regular carbonated soft drinks was added to the daily intake figure and there appears to be some evidence that low calorie drinks replaced regular drinks in the higher TC7 deciles. The proportion of individuals consuming any regular carbonated drinks decreased from around 40% in deciles 1-8 to 23% in decile 10. Among those with any intake, the quantities consumed remained similar (~1 can per day).
+
+```{r drink-replacement-figure, warning=F}
+daily_intake %>% 
+  # Select only those food groups with a non zero score for the TC of interest
+  inner_join(food_groups_loadings %>% 
+               filter(Component == "TC7", Value != 0 | Variable == "BEV241") %>%  
+             mutate(grp_code = as.character(Variable)),
+             by = "grp_code") %>% 
+  # Calculate summary statistics for each decile and food group
+  group_by(TC7_dec, Variable) %>% 
+  # Proportion with any intake 
+   summarise(any_intake = round(sum(grms>0)/length(grms), digits = 2),
+             # Median intake among those with any intake
+             grms_intake = round(median(grms[grms>0]))) %>% 
+  ungroup() %>% 
+
+  ggplot(aes(y = Variable, x = TC7_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC7 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal()
+
+```
+
+
+```{r nutrient-correlations-TC1}
+# Select variables correlated with TC1
+cor_tc1 <- nh %>% 
+  select(one_of(pull(diet_names, `Variable Name`))) %>% 
+  map_dbl(~round(cor(nh$TC1, .), 3)) %>% 
+  enframe(name = "Nutrient", value = "r") %>% 
+  filter(abs(r)>0.15) %>% 
+  arrange(desc(r))
+  
+kable(cor_tc1, caption = "Correlations between TC1 and nutrient variables.", digits = 2)
+```
+
+```{r nutrient-correlations-TC7}
+# Select variables correlated with TC1
+cor_tc7 <- nh %>% 
+  select(one_of(pull(diet_names, `Variable Name`))) %>% 
+  map_dbl(~round(cor(nh$TC7, .), 3)) %>% 
+  enframe(name = "Nutrient", value = "r") %>% 
+  filter(abs(r)>0.1) %>% 
+  arrange(desc(r))
+  
+kable(cor_tc7, caption = "Correlations between TC7 and nutrient variables.", digits = 2)
+```
+
 
 ## Nutrient profiles by treelet component scores
+The final stage of the analysis was to examine the distribution of nutrient intake by TC1 and TC7. The aim was to investigate whether nutrients associated with periodontal disease in other studies showed substantial gradients in the diets associated with CAL in this study.  
+
+
 ```{r nutrients-by-TC1, fig.width=8, fig.height = 12}
 nh %>% select(SEQN, TC1_dec) %>% 
   inner_join(dietary, by = "SEQN") %>% 
@@ -716,6 +820,13 @@ nh %>% select(SEQN, TC1_dec) %>%
              # Median intake among those with any intake
              grms_intake = round(median(intake[intake>0]))) %>% 
   ungroup() %>% 
+  
+  # Select only nutrients with strong correlations 
+  inner_join(cor_tc1, by = "Nutrient") %>%
+  arrange(r) %>% 
+  mutate(Nutrient = as_factor(Nutrient)) %>% 
+
+  # Plot 
   ggplot(aes(y = Nutrient, x = TC1_dec)) +
   geom_tile(aes(fill = any_intake)) +
   geom_text(aes(label = grms_intake), colour = "white") +
@@ -735,150 +846,76 @@ nh %>% select(SEQN, TC7_dec) %>%
              # Median intake among those with any intake
              grms_intake = round(median(intake[intake>0]))) %>% 
   ungroup() %>% 
+
+  # Select only nutrients with strong correlations 
+  inner_join(cor_tc7, by = "Nutrient") %>%
+  arrange(r) %>% 
+  mutate(Nutrient = as_factor(Nutrient)) %>% 
+
   ggplot(aes(y = Nutrient, x = TC7_dec)) +
   geom_tile(aes(fill = any_intake)) +
   geom_text(aes(label = grms_intake), colour = "white") +
   labs(x = "TC7 decile") +
   guides(fill = guide_colourbar(title = "Proportion with any intake")) +
   theme_minimal()
+```
 
+### Intake of sugary drinks
+
+A potential explanation for the association between TC7 and CAL is that those with a high TC7 score have less exposure to carboyhdrates (mainly sugars) in drinks and that this is distinct from overall carbohydrate intake. The quantities of carbohydrates and sugars consumed as drinks were calculated for each individual and plotted by TC7 decile.
+
+```{r carb-food-vs-drink}
+food_drink_intake <- nh %>% 
+  select(SEQN, TC7, TC7_dec) %>% 
+  inner_join(
+    food_grps_per_day %>% 
+              mutate(Intake_Carbs = if_else(grp_code %in% (bevs_included), "Drink", "Food")) %>% 
+              group_by(SEQN, Intake_Carbs) %>% 
+              summarise(CARB = sum(CARB)) %>% 
+  spread(Intake_Carbs, CARB, sep = "_", fill = 0),
+  by = "SEQN")
+
+
+food_drink_intake %>% 
+  select(TC7_dec, Intake_Carbs_Drink, Intake_Carbs_Food) %>% 
+  gather("Variable", "Intake" , -TC7_dec) %>% 
+  ggplot(aes(x = TC7_dec, y = Intake)) +
+  geom_boxplot() +
+  #geom_violin() +
+  facet_wrap(~Variable, scales = "free") +
+  theme_light()
 
 ```
 
-There appears to be as strong correlation between TC scores and overall quantity of food intake. Those in the top decile of TC1 consume considerably more `KCAL` than those in the bottom decile. Therefore, although the TCs do not explicitly contain KCAL, and it is adjusted for in the regression, the signal appears to remain. 
+There was evidence of a weak negative correlation between TC7 score and carbohydrate intake from drinks (r = `r round(cor(food_drink_intake$TC7, food_drink_intake$Intake_Carbs_Drink), 2)`) but not with intake from food (r = `r round(cor(food_drink_intake$TC7, food_drink_intake$Intake_Carbs_Food), 2)`). When added to the CAL model, carbohydrate intake from drinks was associated with increased proportion of sites with CAL but intake from food was not. Including these variables attenuated slightly the assocation with TC7. The same was observed for TC1 indicating that intake of carbohydrates from drinks is a component of this dietary pattern also. This distinction between food and drink sources of carbohydrates has not been observed with regard to periodontal outcomes before.
 
+```{r CAL-with-food-drink-carbs, include = F}
+# Define robust regression model
+rob_mod2 <- update(rob_mod, ~. + Intake_Carbs_Drink + Intake_Carbs_Food)
+# rob_mod2 <- update(rob_mod, ~. + Intake_Carbs_Drink + Intake_Carbs_Food + I(Intake_Carbs_Drink^2) + I(Intake_Carbs_Food^2))
 
-
-```{r kcal-by-TC1}
-nh %>% 
-  select(SEQN, TC1_dec) %>% 
-  inner_join(nhanes, by = "SEQN") %>% 
-  ggplot(aes(x = TC1_dec)) +
-  geom_violin(aes(y = KCAL))
-  
-```
-
-
-```{r correlation-energy-and-grams-intake}
-
-with(food_total_grms_per_day %>% 
-  inner_join(nh, by = "SEQN"), 
-  cor.test(GRMS, KCAL))
-
-food_total_grms_per_day %>% 
+# Setup model matrix
+rob2_matrix <- food_drink_intake %>% 
+  select(SEQN, Intake_Carbs_Drink, Intake_Carbs_Food) %>% 
+  mutate_at(vars(matches("Intake")), scale) %>% 
   inner_join(nh, by = "SEQN") %>% 
-  ggplot(aes(x = GRMS, y = KCAL)) +
-  geom_point() +
-  geom_density_2d()
-  #geom_histogram()
-  
+  model.matrix(rob_mod2, data = .)
 
+# Fit model
+rob2 <- Log.lqr(rob2_matrix, y = nh$prop_CAL_sites3mm, p = 0.5)
 
-
+# Extract coefficients 
+rob2_coef <- bind_cols(Term = colnames(rob2_matrix),
+        as_tibble(rob2$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)#,
+         # Why are these values so high?
+    #"Predicted proportion" = round(invlogit(ifelse(Term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)), 2)
+    ) %>% 
+  rename(Sig = V1)
 ```
 
-An interesting feature of the analysis is the association between high TC7 scores and reduced risk of CAL. TC7 loads on just three food groups: BEV242 (low calorie carbonated soft drinks), SUGAR2 (candy) and GRAIN5 (crackers, popcorn, pretzels, corn chips). 
-
-```{r correlations-among-drinks, include = F}
-food_groups_nhanes %>% 
-    select(matches("BEV|WATER")) %>% 
-  cor() %>% 
-  kable(caption = "Correlation among drink variables.", digits = 2)
-
-
-# Calculate proportions in each drink type
-nh %>% 
-  inner_join(food_groups_nhanes %>% 
-    select(SEQN, matches("BEV|WATER")) %>% 
-  gather(beverage, grms, -SEQN) %>% 
-  group_by(SEQN) %>% 
-  summarise(prop242 = grms[beverage=="BEV242"]/sum(grms)), by = "SEQN") %>% 
-  
-  group_by(TC7_dec) %>% 
-  summarise(mean(prop242))
-  
-  # ggplot(aes(x = TC7_dec, y = prop242)) +
-  # geom_violin()
-
-
-bev <- nh %>% 
-  select(SEQN, TC7_dec) %>% 
-  inner_join(food_groups_nhanes %>% 
-               select(SEQN, matches("BEV|WATER"))             , by = "SEQN") %>% 
-    gather(beverage, grms, -SEQN, -TC7_dec)
-
-
-# bev %>%   
-#   group_by(TC7_dec) %>% 
-#   summarise(intake_dec = sum(grms)) %>% 
-#   inner_join(  bev %>% 
-#    group_by(TC7_dec, beverage) %>% 
-#   mutate(intake_bev = sum(grms)),
-#   by = "TC7_dec")
-#   
-#   
-#   # summarise(intake = mean(grms),
-#   #           intake_prop = sum(grms)) %>% 
-# 
-#   summarise(intake_tot = sum(grms)/intake_dec) %>% 
-# 
-#   ggplot(aes(x = TC7_dec, y = intake_tot)) +
-#   geom_col(aes(fill = beverage))
-
-   
-   
+```{r CAL-food-drink-carbs-coefs}
+kable(rob2_coef, caption = "Estimates from robust logistic quantile regression on CAL. Coefficients and odds ratios  given.")
 ```
 
-
-## Cohort characteristics by treelet component scores   
-
-We explored this further by summarising the characteristics of cohort members by TC scores. TC1 and TC7 clearly proxies for gender.
-
-```{r characteristics-by-TC-quantile}
-perc <- scales::percent_format()
-nh %>% 
-  group_by(`TC1 decile` = TC1_dec) %>% 
-  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
-            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
-            Diabetes = perc(sum(diabetes)/length(diabetes)),
-            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
-  knitr::kable(caption = "Distribution of individual characteristics by TC1 decile.")
-
-nh %>% 
-  group_by(`TC4 decile` = TC4_dec) %>% 
-  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
-            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
-            Diabetes = perc(sum(diabetes)/length(diabetes)),
-            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
-  knitr::kable(caption = "Distribution of individual characteristics by TC4 decile.")
-
-nh %>% 
-  group_by(`TC7 decile` = TC7_dec) %>% 
-  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
-            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
-            Diabetes = perc(sum(diabetes)/length(diabetes)),
-            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
-  knitr::kable(caption = "Distribution of individual characteristics by TC7 decile.")
-
-nh %>% 
-  group_by(`TC8 decile` = TC8_dec) %>% 
-  summarise(Age = paste0(round(mean(RIDAGEYR)), " (", round(sd(RIDAGEYR), digits = 1), ")"),
-            Male = perc(sum(RIAGENDR == 1)/length(RIAGENDR)),
-            Diabetes = perc(sum(diabetes)/length(diabetes)),
-            `Ever smoked` = perc(sum(SMQ020 != 2)/length(SMQ020))) %>% 
-  knitr::kable(caption = "Distribution of individual characteristics by TC8 decile.")
-
-
-
-ggplot(nh, aes(x = as_factor(RIAGENDR), y = TC7)) +
-  geom_boxplot(notch = T)
-
-```
-
-```{r image-correlations-among-TCs}
-ggplot(nh, aes(x = TC1, y = TC7)) +
-  geom_density2d() +
-  facet_wrap(~RIAGENDR)
-
-```
 

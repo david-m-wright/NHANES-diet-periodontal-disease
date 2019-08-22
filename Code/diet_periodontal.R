@@ -8,9 +8,6 @@ source(here("Code", "prepare_periodontal_data.R"))
 source(here("Code", "prepare_dietary_data.R"))
 source(here("Code", "treelet_functions.R"))
 
-
-
-
 ## Smoking status questionaire ##
 smoking <- list.files(path = here("NHANES"), pattern = "SMQ", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
@@ -87,15 +84,21 @@ nhanes <- demographic %>%
 dietary <- dietary %>% 
   inner_join(select(nhanes, SEQN), by = "SEQN") 
 
-
 food_grps_grms_per_day <- food_grps_grms_per_day %>% 
   # Only records for cohort members
   inner_join(select(nhanes, SEQN), by = "SEQN")
   
-
 food_total_grms_per_day <- food_total_grms_per_day %>% 
   # Only records for cohort members
   inner_join(select(nhanes, SEQN), by = "SEQN")
 
+food_grps_per_day <- food_grps_per_day %>% 
+  inner_join(select(nhanes, SEQN), by = "SEQN")
+
+# food_grps_carbs_per_day <- food_grps_carbs_per_day %>% 
+#   inner_join(select(nhanes, SEQN), by = "SEQN")
+# 
+# food_grps_sugars_per_day <- food_grps_sugars_per_day %>% 
+#   inner_join(select(nhanes, SEQN), by = "SEQN")
 
 cat("\n Cohort prepared")
