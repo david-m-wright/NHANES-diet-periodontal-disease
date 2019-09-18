@@ -25,6 +25,8 @@ CheckWithinInterval <- function(x, y){
 # CheckWithinInterval(0, "1 10")
 
 
+cat("\n Preparing dietary data")
+
 ### Dietary data ###
 
 # Day 1 recall questionnaire was in person
@@ -34,8 +36,9 @@ CheckWithinInterval <- function(x, y){
 ## Total nutrient intake files ##
 
 # Read in data from both days for each person
+
 # 1.5 mins
-dietary <- list.files(path = here("NHANES"), pattern = "DR(1|2)TOT_[A-Z]{1}.XPT", recursive = T, full.names = T) %>% 
+dietary <-  list.files(path = here("NHANES"), pattern = "DR(1|2)TOT_[A-Z]{1}.XPT", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
   bind_rows() %>% 
   select(SEQN, matches("^DR(1|2)T"), -matches("NUMF|WS$")) %>% 

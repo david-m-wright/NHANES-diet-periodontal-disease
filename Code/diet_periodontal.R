@@ -8,6 +8,8 @@ source(here("Code", "prepare_periodontal_data.R"))
 source(here("Code", "prepare_dietary_data.R"))
 source(here("Code", "treelet_functions.R"))
 
+cat("\n Preparing analysis cohort")
+
 ## Smoking status questionaire ##
 smoking <- list.files(path = here("NHANES"), pattern = "SMQ", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
@@ -15,11 +17,15 @@ smoking <- list.files(path = here("NHANES"), pattern = "SMQ", recursive = T, ful
   select(SEQN, SMQ020)
 
 ## Demographic data ##
-demographic <- list.files(path = here("NHANES"), pattern = "DEMO", recursive = T, full.names = T) %>% 
-  lapply(read_xpt) %>% 
-  bind_rows() %>% 
-  select(SEQN, SDDSRVYR, RIDSTATR, RIAGENDR, RIDAGEYR, INDFMPIR, DMDEDUC2)
 
+demographic <- list.files(path = here("NHANES"), pattern = "DEMO", recursive = T, full.names = T) %>% 
+  map(~ cbind(read_xpt(.), 
+              # Including wave membership
+              WAVE = str_extract(., "[A-Z]{1}(?=.XPT)"),
+              stringsAsFactors = FALSE)) %>% 
+  bind_rows() %>% 
+  mutate(WAVE = if_else(WAVE == "O", "A", WAVE)) %>% 
+  select(SEQN, WAVE, SDDSRVYR, RIDSTATR, RIAGENDR, RIDAGEYR, INDFMPIR, DMDEDUC2)
 
 ## Diabetes data ##
 # HbA1c
@@ -41,7 +47,7 @@ diabetes <- list.files(path = here("NHANES"), pattern = "DIQ", recursive = T, fu
 ### Construct the cohort ###
 # Join all datasets except dietary #
 
-nhanes <- demographic %>% 
+nhanes_all <- demographic %>% 
   left_join(smoking, by = "SEQN") %>% 
   left_join(tooth_count, by = "SEQN") %>% 
   left_join(energy, by = "SEQN") %>% 
@@ -49,9 +55,11 @@ nhanes <- demographic %>%
   left_join(perio_cal, by = "SEQN") %>% 
   left_join(perio_pocket, by = "SEQN") %>% 
   left_join(diabetes, by = "SEQN") %>% 
-  left_join(transmute(dietary, SEQN, dietary = T), by = "SEQN") %>% 
-  
-## Exclusion criteria
+  left_join(transmute(dietary, SEQN, dietary = T), by = "SEQN")
+
+    
+## Apply exclusion criteria
+nhanes <- nhanes_all %>% 
   # Include only the selected waves
   filter(between(SDDSRVYR, 6, 8)) %>% 
   # Exclude aged < 30
@@ -71,7 +79,7 @@ nhanes <- demographic %>%
   # Exclude people with no sites assessed for CAL
   filter(CAL_sites_assessed > 0) %>% 
   # Exclude people with no sites assessed for pocket depth
-  filter(PD_sites_assessed > 0) %>% 
+  #filter(PD_sites_assessed > 0) %>% 
   
   # Exclude people with no in person dietary questionnaire
   # Check that this is not flagged elsewhere 

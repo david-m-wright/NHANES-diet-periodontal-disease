@@ -1,17 +1,9 @@
 # Nutrient intake and periodontal disease {#nutrient}
 Chapter compiled **`r Sys.Date()`**
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = F)
 library(knitr)
 library(here)
-library(tidyverse)
-library(treelet) # For treelet transform
-library(betareg) # For Beta regression
-library(Formula) # For multipart formulas used in Beta regression
-library(lmtest) # For likelihood ratio tests of Beta regressions
-library(ggdendro)
-library(splines)
-library(broom)
 ```
 
 These notes describe analysis of associations between dietary nutrient intake and periodontal outcomes. Data were drawn from NHANES waves F to H (2009/10 to 2013/14). These waves were selected because they included full mouth periodontal examinations (waves A to C had only half mouth examinations).
@@ -19,23 +11,26 @@ These notes describe analysis of associations between dietary nutrient intake an
 
 ## Cohort construction
 
-```{r prepare modelling dataset, include=FALSE, cache=F}
-source(here("Code", "diet_periodontal.R"))
+```{r prepare-modelling-dataset, include=FALSE, cache=F}
 source(here("Code", "helper_functions.R"))
+source(here("Code", "diet_periodontal.R"))
 ```
 
-A total of 30,468 participants were interviewed across the three waves of interest. Following a previous study of periodontal outcomes using NHANES data [@billings_age-dependent_2018], the cohort was restricted to those aged $\geq30$ years (n = 14,556). Those that did not undergo a medical examination were excluded, leaving a total of 14,071 individuals. Edentate individuals were excluded leaving 11,399 individuals. Those excluded from the periodontal examination for medical reasons were also excluded from the cohort, leaving 11,088 individuals. Individuals in which a periodontal exam was not complete were also excluded, leaving 10,706 individuals. Those with no sites assessed for either pocket depth or clinical attachment loss were excluded, leaving 10,680. Finally, individuals without valid dietary data were excluded leaving a total of `r nrow(nhanes)` individuals in the cohort.
+A total of `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8)))` participants were interviewed across the three waves of interest. Following a previous study of periodontal outcomes using NHANES data [@billings_age-dependent_2018], the cohort was restricted to those aged $\geq30$ years (n = `nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8), RIDAGEYR >= 30))`). Those that did not undergo a medical examination were excluded, leaving a total of `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8), RIDAGEYR >= 30, RIDSTATR == 2)` individuals. Edentate individuals were excluded leaving `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8), RIDAGEYR >= 30, RIDSTATR == 2, tooth_count > 0))` individuals. Those excluded from the periodontal examination for medical reasons were also excluded from the cohort, leaving `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8), RIDAGEYR >= 30, RIDSTATR == 2, tooth_count > 0, EXCLU != 1))` individuals. Individuals in which a periodontal exam was not complete were also excluded, leaving `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8), RIDAGEYR >= 30, RIDSTATR == 2, tooth_count > 0, EXCLU != 1, PDSTS == 1))` individuals. Those with no sites assessed for clinical attachment loss were excluded, leaving `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8), RIDAGEYR >= 30, RIDSTATR == 2, tooth_count > 0, EXCLU != 1, PDSTS == 1, CAL_sites_assessed > 0)). Finally, individuals without valid dietary data were excluded leaving a total of `r nrow(nhanes)` individuals in the cohort.
 
 ## Nutrient intake data
 
 Nutrient intake was measured using  recall of all items consumed over two 24 hour periods. The first period was assessed with an interview in person and the second with a phone interview. A standard procedure was used to convert recall variables to measures of total intake of `r nrow(diet_names)` nutrients for each period (see NHANES documentation). Intakes were averaged across the two measurement periods to give a single intake value for each individual.
 
-```{r list of nutrient variables, echo = F}
+```{r list of nutrient variables}
 kable(diet_names)
 ```
 
 ## Treelet transformation 
 
+```{r treelet-analysis, include = F}
+source(here("Code", "nutrients.R"))
+```
 A major challenge in analysing nutrient intake data (and dietary data in general) is that data are high dimensional, with many variables measured for each individual. Interpreting the outputs from standard statistical models (e.g. regression) can be difficult as a very large number of parameters must be considered. This problem is compounded when interactions among variables are present, a likely occurence for nutrient data where some groups of nutrients will commonly be consumed in the same food items. Multi-colinearity among nutrient variables may also produce invalid parameter estimates if all variables are included within a single model.
 
 Common approaches to address these problems are to use stepwise methods to select variables for inclusion or to mathematically transform the input data, attempting to represent the major features in fewer dimensions. PCA is the most widely used dimension reduction technique, finding the axes that explain the greatest variation in the input data and calculating the assocations between each variable and these axes to produce factor loadings. PCA has the disadvantage that for each of the principal components extracted there are the same number of factor loadings as there are input variables, so a large number of parameters must still be interpreted. Potentially important patterns may be missed if only variables with the largest loadings for each axis are discussed.
@@ -46,76 +41,19 @@ TT is a hybrid of hierarchical clustering and PCA, where variables are clustered
 
 TCs can also be nested, with a single input variable being part of both a local cluster and also a higher level grouping of variables. The same variable may have different loading for each TC of which it is part.
 
-
-```{r treelet analysis, include=F}
-
-# Scale data so can intepret treelets on correlation scale
-diet_scl <- dietary %>% 
-  select(-SEQN) %>% 
-  scale()
-
-# Generate maximum height tree
-# Save basis vectors at all cut levels so the most useful can be selected later
-diet_tree_full <- Run_JTree(cor(diet_scl), maxlev = ncol(diet_scl)-1, whichsave = 1:(ncol(diet_scl)-1))
-# Extract the treelet components and associated variances
-diet_tc_full <- TTVariances(diet_tree_full, cor(diet_scl))
-
-# Dendrogram of maximum height tree
-diet_dendro <- dendro_data(ConvertTTDendro(diet_tree_full))
-
-
-## Initial analysis - data driven selection of number of components and cut points
-
-## Cross validation ##
-# Data driven cross validation to choose a cut level that can describe the 
-# data with few components (TCs)
-# Set the desired number of components (m) and then find the best cut level
-# Cross validation scores for each cut level
-m = 7
-cvs <- replicate(5, CrossValidateTT(diet_scl, m = m))
-
-# Project selected components to get scores for each individual using the selected cut level
-# Original
-diet_tc_reduced <- TTVariances(diet_tree_full, cor(diet_scl), cut_level = 50, components = m)
-
-diet_tc_scores <- diet_scl %*% diet_tc_reduced$tc
-
-### Add TC scores to main NHANES dataset
-nh <- bind_cols(nhanes, as_tibble(diet_tc_scores)) %>% 
-  # Classify TC scores into deciles
-  mutate_at(vars(matches("^TC[0-9]{1,2}$")), list(~as.factor(ntile(., n = 10)))) %>% 
-  rename_at(vars(matches("^TC[0-9]{1,2}$")), ~paste0(., "_dec")) %>% 
-  # Raw TC scores
-  bind_cols(as_tibble(diet_tc_scores)) %>% 
-  inner_join(dietary, by = "SEQN")
-
-#diet_out <- bind_cols(diet, data.frame(diet_tc_scores))
-
-# Extract loadings for TCs
-diet_loadings <- diet_tc_reduced$tc %>% 
-  as_tibble(rownames = "Variable") %>% 
-  gather(Component, Value, -Variable) %>% 
-  # Order by leaf labelling order
-  mutate(Variable = factor(Variable, levels = as.character(diet_dendro$labels$label)))
-
-```
-
 The first stage of the TT analysis was to construct the hierarchical cluster tree. It was decided that total energy intake `KCAL` should be excluded from the cluster tree and instead directly adjusted for when modelling periodontal outcomes.
 
 Tree construction began by standardising all nutrient intake variables so factor loadings can be compared on a common scale. The resulting `r ncol(diet_scl)` by `r ncol(diet_scl)` correlation matrix for these variables was used as the input for the treelet algorithm, which was implemented in the `R` package [@R-base] package `treelet` [@R-treelet]. 
 
-
-
-```{r dendrogram, fig.height = 11, fig.width=7, echo = F}
+```{r dendrogram, fig.height = 11, fig.width=7}
 ggdendrogram(diet_dendro, rotate = T)
 ```
 
 The maximim number of TCs produced by each TT analysis is the number of input variables minus one (in this case `r ncol(dietary)-2` variables). However, in most real-life datasets the majority of variation can be explained by a small number of TCs and these are the ones of substantive interest. A scree plot was produced to select the number of TCs to be reported for the NHANES nutrient intake dataset, indicating that little additional variation is explained by reporting more than 7 TCs. Each additional TC beyond this point explains very little.
 
-```{r treelet scree plot, echo=F}
+```{r treelet-scree-plot}
 # Scree plot to choose number of treelet components to retain
 diet_tc_reduced$tcv %>% 
-#diet_tc_full$tcv %>% 
   ggplot(aes(x = Component, y = Variance)) +
   geom_line() +
   geom_point() +
@@ -125,11 +63,8 @@ diet_tc_reduced$tcv %>%
 
 The majority of variance was explained by the first component (TC1) with TCs 2-6 explaining around 5% of variance each. All 7 TCs combined explained 60% of the total variance.
 
-```{r treelet component variances, echo=F}
+```{r treelet-component-variances}
 diet_tc_reduced$tcv %>% 
-#diet_tc_full$tcv %>% 
-  #mutate(`Adjusted proportion` = adj_proportion) %>% 
-  #select(-adj_proportion) %>% 
   filter(Component <= 7) %>% 
   kable(digits = 2)
 ```
@@ -139,7 +74,7 @@ Having selected the number of TCs to report, the level at which to cut the clust
 The treelet cross validation procedure is described in  @newton_stata_2012 . Briefly, the performance of the TCs in explaining variance in the input data is compared across a range of different cut levels. The level at which there is little additional improvement in cross validation scores is selected as the optimum cut level. For the nutrient intake dataset there was little improvement in scores above level 50 and so this was chosen as the cut point.
 
 
-```{r treelet cross validation plot, echo=F}
+```{r treelet-cross-validation-plot, echo=F}
 apply(cvs, 1, mean) %>% 
   enframe() %>%
   transmute(Cross_validation_score = value, Cut_level = as.numeric(str_extract(name, "[0-9]{1,2}"))) %>% 
@@ -148,12 +83,11 @@ apply(cvs, 1, mean) %>%
   theme_light() + 
   ggtitle("Cross validation performance of treelet transformation") +
   labs(x = "Cut level", y = "Cross validation score")
-
 ```
 
 There was variation among TCs in dispersion and skewness. For example, TC1 had a broad right skewed distribution whereas TC6 had a much narrower distribution. Treelet components are not orthogonal (in contrast to PCA) but correlations among TC scores in the nutrient dataset was low. The largest correlation was between TC1 and TC5 with r = `r round(max(cor(diet_tc_scores)[lower.tri(cor(diet_tc_scores), diag = F)]), digits = 2)`.
 
-```{r TC-score-distributions, echo=F}
+```{r TC-score-distributions}
 # Distribution of TC scores
 diet_tc_scores %>% 
   as_tibble() %>% 
@@ -167,12 +101,7 @@ diet_tc_scores %>%
 
 # Correlation of scores
 # fairly low correlation across scores
-#hist(cor(diet_tc_scores))
-diet_tc_cor <- cor(diet_tc_scores) %>% 
-  formatC(digits = 2, format = "f")
-diet_tc_cor[upper.tri(diet_tc_cor, diag = T)] <- ""
 kable(diet_tc_cor, caption = "Correlation of TC scores")
-
 ```
 
 Factor loadings were extracted for each of the 7 TCs. These can be interpreted in the same way as PCA factor loadings, with a large positive (or negative) loading for a variable indicating that high scores for the TC are associated with high (or low) levels of that variable.
@@ -180,38 +109,30 @@ Factor loadings were extracted for each of the 7 TCs. These can be interpreted i
 Three of the components (TC1, TC3, TC4) loaded on 30 or more variables each, indicating patterns spanning broad overlapping clusters of nutrients. Other TCs were focussed on much smaller clusters of nutrients consumed together. TC1 and TC4 overlapped completely but were uncorrelated, indicating that there were two distinct nutrient patterns based on the same set of variables.    
 
 
-```{r TC loading distribution, echo = F}
+```{r TC-loading-distribution}
 # Number of non-zero loadings for each TC
 diet_loadings %>% 
   group_by(Component) %>% 
   summarise(`Non-zero scores` = sum(abs(Value) > 0)) %>% 
   kable()
-
-
 ```
 
 Those with high TC1 scores showed moderate elevations across a total of 41 nutrients, including fatty acids, fats, sugars, carbohydrates and B vitamins. TC2 was quite different, loading strongly on only vitamin D and four specific fatty acids. TC3 was another broadly based component, this time representing a contrast between elevated intake of iron, folate and B vitamins combined with lower than average intake of fats, cholesterol and fatty acids. TC4 was based on the same variables as TC1 and was characterised by very high intake of 6 individual fatty acids and slightly lower than average intake of the remaining nutrients. TC5 consisted of high intake of vitamins A and B12, retinol and copper. TC6 consisted of high intake of alpha and beta carotene, lutein and zeaxanthin and vitamin K. TC7 represented a contrast between high intake of potassium, magnesium, fibre and folate (from food) and low intakes of vitamins B2, B6, iron and folate from other sources.   
 
-
-```{r treelet loading plots, echo = F, fig.height=11, fig.width=7}
+```{r treelet-loading-plots, fig.height=11, fig.width=7}
 ggplot(diet_loadings, aes(x = Variable, y = Value)) +
   facet_wrap(~Component, nrow = 1) +
   geom_bar(stat = "identity") + 
   coord_flip() + 
   theme_light()
-
-
 ```
-
-
 
 ## Additional variables
 
 In addition to the nutrient intake information included in the TCs, the following variables were available for each individual. These have been previously associated with periodontal outcomes and were adjusted for in subsequent models.Total energy intake `KCAL` was included at this point.
 
-```{r list-of-variables, echo=F}
+```{r list-of-variables}
 # Variables to adjust for
-adj_vars <- c("RIDAGEYR", "RIAGENDR", "SMQ020", "diabetes", "KCAL")
 enframe(names(nhanes)) %>% 
   filter(value %in% adj_vars) %>% 
   transmute(`Variable Name` = value) %>% 
@@ -222,57 +143,30 @@ enframe(names(nhanes)) %>%
 
 ## Clinical attachment loss (CAL)
 
-The second stage of the analysis was to estimate associations between the patterns of nutrient intake represented by the TCs and periodontal outcomes. The primary outcome was a measure of tooth clinical attachment loss, an indicator of chronic periodontal disease. For a maximum of six sites surrounding each tooth the distances in mm between the free gingival margin and the cemento-enamel junction (CEJ) and between the free gingival margin and the sulcus base (pocket depth, PD) were measured. These two distances were differenced to produce a measure of clinical attachment loss at each site. In accordance with reporting guidelines for periodontal outcomes (Holtfreter et al., @holtfreter_standards_2015 ), extent of CAL for each individual was measured in terms of a) the proportion of sites with CAL $\geq$ 3mm and b) the mean CAL over all sites assessed.  
+The second stage of the analysis was to estimate associations between the patterns of nutrient intake represented by the TCs and periodontal outcomes. The primary outcome was a measure of tooth clinical attachment loss, an indicator of chronic periodontal disease. For a maximum of six sites surrounding each tooth the distances in mm between the free gingival margin and the cemento-enamel junction (CEJ) and between the free gingival margin and the sulcus base (pocket depth, PD) were measured. These two distances were differenced to produce a measure of clinical attachment loss at each site. In accordance with reporting guidelines for periodontal outcomes (@holtfreter_standards_2015), extent of CAL for each individual was measured in terms of a) the proportion of sites with CAL $\geq$ 3mm.  
 
 The distribution of the number of sites assessed was multimodal with peaks corresponding to assessment of all six sites for the number of teeth present. Approximately 75% of individuals had $\geq120$ sites assessed corresponding to full assessments for $\geq20$ teeth.   
 
-```{r CAL sites assessed, echo = F}
-CAL_sites_assessed <- nh %>% 
+```{r CAL-sites-assessed}
+nh %>% 
   count(CAL_sites_assessed) %>%
-  mutate(proportion = cumsum(n)/sum(n)*100)
-
-  # ggplot(CAL_sites_assessed, aes(x = CAL_sites_assessed, y = n)) + 
-  # geom_bar(stat = "identity") + 
-  # theme_light() +
-  # labs(x = "Sites assessed", y = "Individuals") +
-  # ggtitle("Sites assessed for clinical attachment loss")
-  # 
-  ggplot(CAL_sites_assessed, aes(x = CAL_sites_assessed, y = proportion)) +
+  mutate(proportion = cumsum(n)/sum(n)*100) %>% 
+  ggplot(aes(x = CAL_sites_assessed, y = proportion)) +
   geom_line() +
   #geom_vline(xintercept = 120) +
   theme_light() +
   labs(x = "Sites assessed", y = "Percentage of individuals") +
   ggtitle("Sites assessed for clinical attachment loss")
-
-
 ```
 
 The distribution of the proportion of sites with CAL $\geq$ 3mm was strongly right skewed; the median number of sites showing  CAL $\geq$ 3mm was `r median(nh$CAL_sites3mm)`.     
 
-```{r CAL extent distribution, echo = F}
+```{r CAL-extent-distribution}
 ggplot(nh, aes(x = prop_CAL_sites3mm)) +
   geom_histogram(bins = 50) +
   theme_light() +
    labs(x = expression("Proportion of sites with CAL">="3mm"), y = "Individuals") +
    ggtitle("Extent of clinical attachment loss")
-
-# CAL_extent <- nh %>% 
-#   count(CAL_sites3mm) %>%
-#   mutate(proportion = cumsum(n)/sum(n)*100)
-# 
-# ggplot(CAL_extent, aes(x = CAL_sites3mm, y = n)) + 
-#   geom_bar(stat = "identity") + 
-#   theme_light() +
-#   labs(x = expression("Sites with CAL">="3mm"), y = "Individuals") +
-#   ggtitle("Extent of clinical attachment loss")
-# 
-# ggplot(CAL_extent, aes(x = CAL_sites3mm, y = proportion)) + 
-#   geom_line() + 
-#   theme_light() +
-#   labs(x = expression("Sites with CAL">="3mm"), y = "Percentage of individuals") +
-#   ggtitle("Extent of clinical attachment loss")
-
-
 ```
 
 Beta regression was used to estimate associations between TCs and CAL, adjusting for age, gender, smoking status, diabetes status and total energy intake. Beta regression was chosen because it allows flexible modelling of outcomes constrained to the (0,1) interval (e.g. proprotions*) whilst allowing for the excess variation often encountered using such data that is not well accounted for using logistic models. Extended forms of Beta regression allows fitting of joint models that simultaneously estimate associations between explanatory variables and both the mean and variance of the outcome variable.
@@ -282,20 +176,8 @@ Alternative techniques for dealing with excess variation (overdispersion) includ
 
 A series of base models was fitted including just the adjustment variables, to choose an appropriate structure for the precision sub-model (i.e. to determine whether any were associated with outcome variance and so should be explicitly modelled). 
 
-```{r CAL precision models, echo = F}
-# Transform the proportion of CAL sites so that all values lie within the interval (0,1) for beta regression
-nh$prop_CAL_sites3mm_beta <- PropTransform(nh$prop_CAL_sites3mm)
-
-# Beta regression model with fixed dispersion
-cal1_form <- as.Formula(paste("prop_CAL_sites3mm_beta ~", paste(adj_vars, collapse = "+")))
-cal1 <- betareg(cal1_form, data = nh)
-# Beta regression with variable dispersion model
-cal2_form <- as.Formula(paste("prop_CAL_sites3mm_beta ~", paste(adj_vars, collapse = "+"), "|", paste(adj_vars, collapse = "+")))
-cal2 <- betareg(cal2_form, data = nh)
-# Dropping KCAL from the precision model (not significant)
-cal3 <- update(cal2, .~. |.-KCAL, data = nh)
+```{r CAL-precision-model}
 summary(cal3)
-
 ```
 
 The best model was a variable dispersion model in which all of the adjustment variables were included in the precision sub-model except for `KCAL`. This model had substantially lower BIC than a constant dispersion model (BIC = `r round(BIC(cal3))` and BIC = `r round(BIC(cal1))` respectively).
@@ -304,62 +186,25 @@ In the mean submodel, greater age and diabetes were associated with increased ex
 
 The TCs were added to the mean sub-model of the regression to estimate the associations between TCs and extent of CAL. Although all seven TCs were included within the same model, this is unlikely to have introduced estimation problems as correlation among the TCs was low. Fitting linear terms for each of the TCs revealed negative assocations between `TC1`, `TC3`, `TC7` and the proportion of sites with CAL. There was a positive association between `TC2` and the outcomes.
 
-```{r CAL TC linear model, echo=F}
-cal4 <- update(cal3, .~. + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + TC7 |., data = nh)
+```{r CAL-TC-linear-model}
 summary(cal4)
-
-```
-
-```{r CAL TC polynomial models, include = F}
-# Cubic spline fit
-cal5 <- update(cal4, .~. - TC1 - TC2 - TC3 - TC4 - TC5 - TC6 - TC7 + bs(TC1) + bs(TC2) + bs(TC3) + bs(TC4) + bs(TC5) + bs(TC6) + bs(TC7)|., data = nh)
-summary(cal5)
-# Quadratic fit
-cal6 <- update(cal4, .~. + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) |., data = nh)
-summary(cal6)
-
-# Note that bias correction or bias reduction made very little difference to estimates
-cal4bc <- update(cal4, type = "BC")
-cal4br <- update(cal4, type = "BR")
-format(exp(cbind(coef(cal4), coef(cal4bc), coef(cal4br))), digits = 4)
-
 ```
 
 Additional models were fitted with polynomial terms for the TCs (cubic splines and quadratic terms) but the most parsimonious model remained the linear fit (BICs of `r round(BIC(cal4))`, `r round(BIC(cal5))`, `r round(BIC(cal6))` for the linear, spline and quadratic fits respecitvely).  
 
-
 Predicted values from the linear fit captured the skewed nature of the outcome distribution but under-predicted at the tails.
 
-```{r overall predictions from beta regression, echo = FALSE}
-
-# Predicted values
+```{r overall-predictions-from-beta-regression}
 ggplot(enframe(predict(cal4)), aes(x = value)) +
   geom_histogram(bins = 50) +
   theme_light() + 
   labs(x = expression("Proportion of sites with CAL">="3mm"), y = "Individuals") +
   ggtitle("Predicted extent of clinical attachment loss")
-
 ```
 
 Predictions across the ranges of each TC revealed the relative magnitude of the associations with CAL, with the majority of the variation in CAL associated with TC1. Predictions were made representing a male, non-smoker of age `r round(mean(nhanes$RIDAGEYR))` with no diabetes. There was a predicted decrease in the proprtion of sites with CAL of more than 10% across the range of TC1 scores. 
 
-```{r TC predictions from beta regression, echo =F}
-# Model to predict from
-mpred <- cal4
-
-# Take quantiles and stack
-tc_qtx <- StackQuantiles(diet_tc_scores, probs = seq(0.02, 0.98, by = 0.01))
-
-# Prediction for average aged, male, non-smoker, non-diabetic, average energy intake
-cal_pred_frame <- cbind(RIDAGEYR = mean(nh$RIDAGEYR), 
-       RIAGENDR = 1, 
-       SMQ020 = 2, 
-       diabetes = F,
-       KCAL = mean(nh$KCAL),
-       tc_qtx) %>% 
-  as_tibble()
-  
-
+```{r TC-predictions-from-beta-regression}
 cal_pred_frame %>% 
   select(component, qtile) %>% 
   cbind(CAL_pred = predict(mpred, newdata = cal_pred_frame, type = "response")) %>% 
@@ -369,36 +214,13 @@ ggplot(aes(x = qtile, y = CAL_pred)) +
   theme_light() +
   labs(y = expression("Proportion of sites with CAL">="3mm"), x = "Percentile of TC distribution") +
   ggtitle("Predicted extent of clinical attachment loss")
-
-
 ```
 
 ### Varying the cut-level of the cluster tree 
 
 A limitation of the initial analysis was that much of the variation was explained by TC1 and so there still remained a large number of factor loadings to interpret for this component, making it difficult to infer which nutrients were responsible for variation in CAL. A second analysis was conducted, cutting the cluster tree closer to the leaves (level 40) and retain nine rather than seven components in an attempt to separate some of the elements in TC1. 
 
-```{r second treelet analysis, include = F}
-## Second treelet analysis, varying the number of components and cut levels
-diet_tc_reduced2 <- TTVariances(diet_tree_full, cor(diet_scl), cut_level = 40, components = 9)
-diet_tc_scores2 <- diet_scl %*% diet_tc_reduced2$tc
-
-cvs2 <- replicate(5, CrossValidateTT(diet_scl, m = 9))
-
-nh2 <- bind_cols(nhanes, as_tibble(diet_tc_scores2)) %>% 
-  inner_join(dietary, by = "SEQN") %>% 
-  mutate(prop_CAL_sites3mm_beta = PropTransform(prop_CAL_sites3mm))
-
-# Extract loadings for TCs
-diet_loadings2 <- diet_tc_reduced2$tc %>% 
-  as_tibble(rownames = "Variable") %>% 
-  gather(Component, Value, -Variable) %>% 
-  # Order by leaf labelling order
-  mutate(Variable = factor(Variable, levels = as.character(diet_dendro$labels$label)))
-
-
-```
-
-```{r second treelet cross validation, echo = F}
+```{r second-treelet-cross-validation}
 apply(cvs2, 1, mean) %>% 
   enframe() %>%
   transmute(Cross_validation_score = value, Cut_level = as.numeric(str_extract(name, "[0-9]{1,2}"))) %>% 
@@ -407,12 +229,11 @@ apply(cvs2, 1, mean) %>%
   theme_light() + 
   ggtitle("Cross validation performance of treelet transformation") +
   labs(x = "Cut level", y = "Cross validation score")
-
 ```
 
 The modified decomposition retained at cut level 40 demonstrated reasonably good cross validation performance, indicating that the majority of variation in nutrient distribution was captured by the model. TC2 had a much broader distribution than in the original analysis, indicating that some of the variation associated with TC1 had been spread to it. However, cutting the tree at this level increased the correlation between TCs.
 
-```{r second TC score distributions, echo=F}
+```{r second-TC-score-distributions}
 # Distribution of TC scores
 diet_tc_scores2 %>% 
   as_tibble() %>% 
@@ -425,64 +246,33 @@ diet_tc_scores2 %>%
   ggtitle("Distribution of Treelet Component scores")
 
 # Correlation of scores
-# fairly low correlation across scores
-#hist(cor(diet_tc_scores))
-diet_tc_cor2 <- cor(diet_tc_scores2) %>% 
-  formatC(digits = 2, format = "f")
-diet_tc_cor2[upper.tri(diet_tc_cor2, diag = T)] <- ""
 kable(diet_tc_cor2, caption = "Correlation of TC scores, cut level 40")
-
 ```
 
 As expected, the new TCs were more sparsely loaded, with 17 and 13 non-zero loadings for TC1 and TC2 respectively. TC1 appeared to load heavily on high intake of fats and TC2 on fibre and minerals. TC3 was associated with high intake of five fatty acids and TC4 with vitamins A, B12, retinol and copper. TC5 loaded on high intake of three fatty acids, TC6 on high intake of vitamin K and lutein/zeaxantin. TC7 was associated with high intake of sugar and carbohydrates and TC8 was associated with high intake of alpha and beta carotene. TC9 loaded on the same nutrients as TC2 but represented a contrast between high fibre intake and lower than average intake of the vitamins and minerals in this group.
 
-
-```{r second treelet loading plots, echo = F, fig.height=11, fig.width=7}
-
+```{r second-treelet-loading-plots, fig.height=11, fig.width=7}
 # Number of non-zero loadings for each TC
 diet_loadings2 %>% 
   group_by(Component) %>% 
   summarise(`Non-zero scores` = sum(abs(Value) > 0)) %>% 
   kable(caption = "Distibution of nutrient loadings, cut level 40")
 
-
 ggplot(diet_loadings2, aes(x = Variable, y = Value)) +
   facet_wrap(~Component, nrow = 1) +
   geom_bar(stat = "identity") + 
   coord_flip() + 
   theme_light()
-
-
 ```
 
 A similar modelling exercise was conducted, and inclusion of linear terms only was associated with the most parsimonious fit. In this analysis, high scores for TC1, TC2, TC3 and TC9 were associated with reduced proportions of sites with CAL. Greater variation in CAL was assocated with TC2 than TC1, indicating that fibre is potentially of greater imporance than fat intake. The negative association between TC9 and CAL provides further evidence for the importance of fibre intake.
 
-```{r second analysis CAL TC models, echo = F}
-cal7 <- update(cal4, .~. + TC8 + TC9 |., data = nh2)
-cal8 <- update(cal6, .~. + TC8 + TC9 + I(TC8^2) + I(TC9^2)|., data = nh2)
-#BIC(cal7, cal8)
-summary(cal7)
-
-# Prediction for average aged, male, non-smoker, non-diabetic, average energy intake
-cal_pred_frame2 <- cbind(RIDAGEYR = mean(nh$RIDAGEYR), 
-       RIAGENDR = 1, 
-       SMQ020 = 2, 
-       diabetes = F,
-       KCAL = mean(nh$KCAL),
-       StackQuantiles(diet_tc_scores2, probs = seq(0.02, 0.98, by = 0.01))) %>% 
-  as_tibble()
-  
-
+```{r second-analysis-CAL-TC-models}
 cal_pred_frame2 %>% 
   select(component, qtile) %>% 
   cbind(CAL_pred = predict(cal7, newdata = cal_pred_frame2, type = "response")) %>% 
-ggplot(aes(x = qtile, y = CAL_pred)) +
+  ggplot(aes(x = qtile, y = CAL_pred)) +
   geom_line() +
   facet_wrap(~component) +
   theme_light()
-
-
-
 ```
-
-

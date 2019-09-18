@@ -14,6 +14,8 @@ DropPerioPrefix <- function(dat){
 }
 
 
+cat("\n Preparing periodontal data")
+
 ## Dental examination ##
 
 # Calculate tooth count from dental exam data
