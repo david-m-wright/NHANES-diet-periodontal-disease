@@ -8,7 +8,7 @@ require(ggdendro)
 require(splines)
 require(broom)
 
-cat("\n Running treelet analysis on nutrient intake")
+cat("\n Running treelet analysis on nutrients\n")
 
 # Scale data so can intepret treelets on correlation scale
 diet_scl <- dietary %>% 
