@@ -78,7 +78,7 @@ Percentage ever smoked: `r perc(sum(nhanes$SMQ020 == 1)/length(nhanes$RIAGENDR))
 25th, 50th and 75th percentiles of tooth count: `r quantile(nhanes$tooth_count, probs = c(0.25, 0.5, 0.75))`   
 25th, 50th and 75th percentiles of proportion of sites with CAL $\geq3$mm: `r perc(quantile(nhanes$prop_CAL_sites3mm, probs = c(0.25, 0.5, 0.75)))`   
 Strongest correlation among TC scores: $\tau=$ `r sort(na.omit(as.numeric(food_groups_tc_cor)))[1]`   
-Correlation between intake of low calorie and regular carbonated drinks: r = `round(r food_groups_cor["BEV242", "BeV241"], digits = 2)`      
+Correlation between intake of low calorie and regular carbonated drinks: r = `r round(r food_groups_cor["BEV242", "BeV241"], digits = 2)`      
 Correlation between intake of Theobromine and TC7 score `r round(cor_tc7["THEO"], digits = 2)`   
 
 ## Tables
