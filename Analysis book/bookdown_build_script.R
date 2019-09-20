@@ -13,7 +13,8 @@ setwd(here("Analysis book"))
 # Render a single chapter
 #preview_chapter("01-nutrients.Rmd")
 #preview_chapter("02-food_groups.Rmd")
-#preview_chapter("03-references.rmd")
+#preview_chapter("03-figures_for_paper.Rmd")
+#preview_chapter("04-references.rmd")
 
 # Render the entire book
 bookdown::render_book("index.Rmd", "bookdown::gitbook")

@@ -207,6 +207,10 @@ food_grps_per_day <- food_grp1 %>%
   mutate(GRMS = if_else(DRDINT == 2, (DR1IGRMS + DR2IGRMS)/2, pmax(DR1IGRMS, DR2IGRMS)),
          CARB = if_else(DRDINT == 2, (DR1ICARB + DR2ICARB)/2, pmax(DR1ICARB, DR2ICARB)),
          SUGR = if_else(DRDINT == 2, (DR1ISUGR + DR2ISUGR)/2, pmax(DR1ISUGR, DR2ISUGR))) %>% 
+  # # The simple average
+  # mutate(GRMS = (DR1IGRMS + DR2IGRMS)/2,
+  #        CARB = (DR1ICARB + DR2ICARB)/2,
+  #        SUGR = (DR1ISUGR + DR2ISUGR)/2) %>% 
   ungroup()
 
 # Wide format

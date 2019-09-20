@@ -58,7 +58,7 @@ food_groups_dendro <- dendro_data(ConvertTTDendro(food_groups_tree_full))
 # Set the desired number of components (m) based on scree plot and then find the best cut level
 # Cross validation scores for each cut level
 m_grps <- 8
-cvs <- replicate(5, CrossValidateTT(food_groups_scl, m = m_grps))
+cvs_grps <- replicate(5, CrossValidateTT(food_groups_scl, m = m_grps))
 
 
 # Fit reduced treelet
@@ -235,8 +235,20 @@ TC1_cdf_medians <- nh_grps %>%
   gather(Measurement, value, -TC_decile)
 
 
+# Median predictions for TC7 from robust regression
+TC7_medians <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob1$fitted.values),
+        predicted_upper = invlogit(rob1_upper$fitted.values),
+        predicted_lower = invlogit(rob1_lower$fitted.values)) %>% 
+  group_by(TC_decile = TC7_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted 25th percentile" = median(predicted_lower),
+            "Predicted median: robust regression (decile)" = median(predicted_robust),
+            "Predicted 75th percentile" = median(predicted_upper)) %>% 
+  gather(Measurement, value, -TC_decile)
 
-## Rredictions from robustregression ##
+
+## Predictions from robust regression ##
 
 # TC1 at decile 6
 rob_pred_frame %>% 
@@ -374,19 +386,13 @@ ExtractTCIntake <- function(daily_intake, TC, decile_column){
 # Select variables correlated with TC1
 cor_tc1 <- nh_grps %>% 
   select(one_of(pull(diet_names, `Variable Name`))) %>% 
-  map_dbl(~round(cor(nh_grps$TC1, .), 3)) %>% 
-  enframe(name = "Nutrient", value = "r") %>% 
-  filter(abs(r)>0.15) %>% 
-  arrange(desc(r))
+  map_dbl(~round(cor(nh_grps$TC1, ., method = "kendall"), 3)) 
 
 
 # Select variables correlated with TC7
 cor_tc7 <- nh_grps %>% 
   select(one_of(pull(diet_names, `Variable Name`))) %>% 
-  map_dbl(~round(cor(nh_grps$TC7, .), 3)) %>% 
-  enframe(name = "Nutrient", value = "r") %>% 
-  filter(abs(r)>0.1) %>% 
-  arrange(desc(r))
+  map_dbl(~round(cor(nh_grps$TC7, ., method = "kendall"), 3))
 
 # Intake of carbohydrates from food and drink by TC7
 food_drink_intake <- nh_grps %>% 

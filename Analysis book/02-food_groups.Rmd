@@ -18,6 +18,10 @@ source(here("Code", "diet_periodontal.R"))
 source(here("Code", "helper_functions.R"))
 ```
 
+```{r treelet-analysis-food-groups, include = F}
+source(here("Code", "food_groups.R"))
+```
+
 Food groups were selected for inclusion in the treelet analysis such that they were non-overlapping and gave the maximum resolution possible.
 
 ```{r table-of-food-groups}
@@ -38,10 +42,6 @@ However, when the median intakes of food groups were compared by TC score it bec
 The approach chosen was to scale the intakes of each food group by the total energy consumption for that individual to give an indication of the proportion of the diet attributable to that food group. This was done crudely by dividing the grammes intake by total `KCAL` however this does not account for the differences in energy values between foods and may downweight the foods never consumed in large quantities.
 
 When comparing the initial raw quantity analysis with an analysis of variables scaled by `KCAL` the cluster trees were similar but the variables included in each TC and the loadings were not. `KCAL` was also excluded from the regression models to avoid overadjustment. When plotting the resulting TC deciles against unadjusted daily intake (g) the summaries no longer give the impression that simply consuming more is better. 
-
-```{r treelet-analysis-food-groups, include = F}
-source(here("Code", "food_groups.R"))
-```
 
 The full height dendrogram for the included food groups revealed plausible associations among food groups. For example, the most closely correlated groups were lettuce and salad dressing, followed by milk and ready-to-eat cereals.
 
@@ -65,7 +65,7 @@ The scree plot indicates that it would be appropriate to retain 8 components, as
 The cross validation plot indicates that a cut level of 28 would be appropriate, as there is little additional increase in score with increasing cut level beyond this point.
 
 ```{r treelet-cross-validation-plot, echo=F}
-apply(cvs, 1, mean) %>% 
+apply(cvs_grps, 1, mean) %>% 
   enframe() %>%
   transmute(Cross_validation_score = value, Cut_level = as.numeric(str_extract(name, "[0-9]{1,2}"))) %>% 
   ggplot(aes(x = Cut_level, y = Cross_validation_score)) +
@@ -275,7 +275,6 @@ Age was the greatest source of variation in proportion of sites with CAL. The co
 
 ```{r robust-coefficients}
 kable(rob1_coef, caption = "Estimates from robust logistic quantile regression on CAL. Coefficients and odds ratios  given.")
-
 ```
 
 Combining the conditional estimates to make predictions for some representative groups, the decrease in median proportion of sites with CAL between TC1 decile 1 (`r round(tc1_dec1, 2)`%) and TC1 decile 10 (`r round(tc1_dec10, 2)`%) was equivalent to the change expected with decrease in age from 59 to 45 years. For TC7, the decrease from decile 1 (`r round(tc7_dec1, 2)`%) to decile 10 (`r round(tc7_dec10)`%) was equivalent to a decrease in age from 59 to 47 years. It was notable that the decrease in CAL only occured in deciles five and above of TC7.
@@ -339,6 +338,7 @@ For TC1 the most commonly consumed items were water, tomatoes (`VEG4`) and 'othe
 ```{r TC1-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC1 decile."}
 ggplot(ExtractTCIntake(daily_intake, 1, TC1_dec), aes(y = Variable, x = TC1_dec)) +
   geom_tile(aes(fill = any_intake)) +
+  scale_fill_gradient(breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) + 
   geom_text(aes(label = grms_intake), colour = "white") +
   labs(x = "TC1 decile", y = "Food group") +
   guides(fill = guide_colourbar(title = "Proportion with any intake")) +
@@ -350,6 +350,7 @@ The greatest variation in the proportion of individuals consuming a food group f
 ```{r TC7-food-group-daily-intake, fig.cap = "Daily intake of food groups by TC7 decile.", warning=FALSE}
 ggplot(ExtractTCIntake(daily_intake, 7, TC7_dec), aes(y = Variable, x = TC7_dec)) +
   geom_tile(aes(fill = any_intake)) +
+  scale_fill_gradient(breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) + 
   geom_text(aes(label = grms_intake), colour = "white") +
   labs(x = "TC7 decile", y = "Food group") +
   guides(fill = guide_colourbar(title = "Proportion with any intake")) +
@@ -386,6 +387,7 @@ daily_intake %>%
 
   ggplot(aes(y = Variable, x = TC7_dec)) +
   geom_tile(aes(fill = any_intake)) +
+  scale_fill_gradient(breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) + 
   geom_text(aes(label = grms_intake), colour = "white") +
   labs(x = "TC7 decile", y = "Food group") +
   guides(fill = guide_colourbar(title = "Proportion with any intake")) +
@@ -395,11 +397,19 @@ daily_intake %>%
 
 
 ```{r nutrient-correlations-TC1}
-kable(cor_tc1, caption = "Correlations between TC1 and nutrient variables.", digits = 2)
+cor_tc1 %>% 
+  enframe(name = "Nutrient", value = "r") %>% 
+  filter(abs(r)>0.15) %>% 
+  arrange(desc(r)) %>% 
+kable(caption = "Correlations between TC1 and nutrient variables.", digits = 2)
 ```
 
 ```{r nutrient-correlations-TC7}
-kable(cor_tc7, caption = "Correlations between TC7 and nutrient variables.", digits = 2)
+cor_tc7 %>% 
+  enframe(name = "Nutrient", value = "r") %>% 
+  filter(abs(r)>0.1) %>% 
+  arrange(desc(r)) %>% 
+kable(caption = "Correlations between TC7 and nutrient variables.", digits = 2)
 ```
 
 
@@ -407,7 +417,7 @@ kable(cor_tc7, caption = "Correlations between TC7 and nutrient variables.", dig
 The final stage of the analysis was to examine the distribution of nutrient intake by TC1 and TC7. The aim was to investigate whether nutrients associated with periodontal disease in other studies showed substantial gradients in the diets associated with CAL in this study.  
 
 
-```{r nutrients-by-TC1, fig.width=8, fig.height = 12}
+```{r nutrients-by-TC1, fig.width=8, fig.height = 4}
 nh_grps %>% select(SEQN, TC1_dec) %>% 
   inner_join(dietary, by = "SEQN") %>% 
   gather("Nutrient", "intake", -SEQN, -TC1_dec) %>% 
@@ -419,7 +429,10 @@ nh_grps %>% select(SEQN, TC1_dec) %>%
   ungroup() %>% 
   
   # Select only nutrients with strong correlations 
-  inner_join(cor_tc1, by = "Nutrient") %>%
+  inner_join(cor_tc1 %>% 
+               enframe(name = "Nutrient", value = "r") %>% 
+  filter(abs(r)>0.15)
+  , by = "Nutrient") %>%
   arrange(r) %>% 
   mutate(Nutrient = as_factor(Nutrient)) %>% 
 
@@ -433,7 +446,7 @@ nh_grps %>% select(SEQN, TC1_dec) %>%
 
 ```
 
-```{r nutrients-by-TC7, fig.width=8, fig.height = 12}
+```{r nutrients-by-TC7, fig.width=8, fig.height = 2}
 nh_grps %>% select(SEQN, TC7_dec) %>% 
   inner_join(dietary, by = "SEQN") %>% 
   gather("Nutrient", "intake", -SEQN, -TC7_dec) %>% 
@@ -445,7 +458,10 @@ nh_grps %>% select(SEQN, TC7_dec) %>%
   ungroup() %>% 
 
   # Select only nutrients with strong correlations 
-  inner_join(cor_tc7, by = "Nutrient") %>%
+  inner_join(cor_tc7 %>% 
+            enframe(name = "Nutrient", value = "r") %>% 
+  filter(abs(r)>0.1)
+  , by = "Nutrient") %>%
   arrange(r) %>% 
   mutate(Nutrient = as_factor(Nutrient)) %>% 
 

@@ -7,8 +7,24 @@ require(scales)
 # Percentage formatter
 perc <- scales::percent_format()
 
+# Returns the inverse of the logit transformation (from the arm package)
+invlogit <-   function (x) 
+{
+  1/(1 + exp(-x))
+}
+
 # Format P values so that those < 0.001 are marked as such and all other returned to three digit precision
 FormatPValue <- function(pv){ifelse(pv < 0.001, "<0.001", formatC(pv, digits = 3, format = "f"))}
+
+# Format Odds Ratios or Risk Ratios given estimate and standard error from logistic regression
+FormatOddsRatio <- function(estimate, std_error){
+  paste0(formatC(exp(estimate), digits = 2, format = "f"), 
+        " (", 
+        formatC(exp(estimate - 1.96*std_error), digits = 2, format = "f"),
+        ", ",
+        formatC(exp(estimate + 1.96*std_error), digits = 2, format = "f"),
+        ")")
+}
 
 # Transform a proportion measures so that all values lie within the interval (0,1) for beta regression
 # Arguments: x = vector to transform
@@ -45,11 +61,6 @@ StackQuantiles <- function(mat, fill_val = 0, ...){
   }
 
 
-# Returns the inverse of the logit transformation (from the arm package)
-invlogit <-   function (x) 
-  {
-    1/(1 + exp(-x))
-}
 
 # # Function to present a formatted table of risk ratios from a fitted log-binomial model
 # TidyLogBinomal <- function(lb_model){

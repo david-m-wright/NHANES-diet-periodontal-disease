@@ -1,0 +1,208 @@
+# Figures and tables for publication {#paper}
+Chapter compiled **`r Sys.Date()`**
+
+This chapter comprises the figures and tables describing these analyses for publication.
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(here)
+library(tidyverse)
+```
+
+
+```{r prepare-modelling-dataset, include=FALSE}
+source(here("Code", "diet_periodontal.R"))
+source(here("Code", "helper_functions.R"))
+```
+
+```{r run-analyses, include=FALSE}
+source(here("Code", "food_groups.R"))
+```
+
+## Figures for text
+NHANES respondents 2009-2014: `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8)))`
+Persons aged $\geq30$ years: `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30))`
+Persons aged $\geq30$ years with medical examination:`r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2))`
+Persons aged $\geq30$ years with medical examination who are dentate:`r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    tooth_count > 0))`
+Persons aged $\geq30$ years with medical examination who are dentate and eligible for periodontal exam:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    tooth_count > 0,
+                                    EXCLU != 1))`
+Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    tooth_count > 0,
+                                    EXCLU != 1,
+                                    PDSTS == 1))`
+Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam with $\geq1$ sites assessed for clinical attachment loss:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    tooth_count > 0,
+                                    EXCLU != 1,
+                                    PDSTS == 1,
+                                    CAL_sites_assessed > 0))`
+Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam with $\geq1$ sites assessed for clinical attachment loss and had valid dietary data:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    tooth_count > 0,
+                                    EXCLU != 1,
+                                    PDSTS == 1,
+                                    CAL_sites_assessed > 0,
+                                    PD_sites_assessed > 0,
+                                    dietary == T))`
+
+Mean age of the cohort: `r round(mean(nhanes$RIDAGEYR))`
+SD age of the cohort: `r round(sd(nhanes$RIDAGEYR), 1)`
+Percentage male: `r perc(sum(nhanes$RIAGENDR == 1)/length(nhanes$RIAGENDR))`
+Percentage with diabetes: `r perc(sum(nhanes$diabetes)/length(nhanes$diabetes))`
+Percentage ever smoked: `r perc(sum(nhanes$SMQ020 == 1)/length(nhanes$RIAGENDR))`
+25th, 50th and 75th percentiles of tooth count: `r quantile(nhanes$tooth_count, probs = c(0.25, 0.5, 0.75))`
+25th, 50th and 75th percentiles of proportion of sites with CAL $\geq3$mm: `r perc(quantile(nhanes$prop_CAL_sites3mm, probs = c(0.25, 0.5, 0.75)))`
+Strongest correlation among TC scores: $\tau=$ `r sort(na.omit(as.numeric(food_groups_tc_cor)))[1]`
+Correlation between intake of low calorie and regular carbonated drinks: r = `round(r food_groups_cor["BEV242", "BeV241"], digits = 2)`.
+Correlation between intake of Theobromine and TC7 score `r round(cor_tc7["THEO"], digits = 2)`
+
+## Tables
+```{r food-groups-included}
+fgrp %>% 
+  select(grp_code, grp_description) %>% 
+  distinct() %>%
+  filter(grp_code %in% names(food_groups_nhanes)) %>% 
+  transmute(`Food group` = grp_code, 
+            `Description` = grp_description) %>% 
+  arrange(`Food group`) %>% 
+  kable(caption="USDA food groups included in treelet analysis.")
+
+```
+
+```{r selected-robust-coefficients}
+rob1_coef %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "SMQ020" ~ "Never smoked",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+  filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+  
+  full_join(TC1_medians %>% 
+              mutate(TC = "TC1") %>% 
+              rbind(TC7_medians %>% 
+                      mutate(TC = "TC7")) %>% 
+              filter(str_detect(Measurement, "robust")) %>% 
+              mutate(Variable = paste(TC, "Decile", TC_decile),
+                        `Sites with CAL` = perc(value))
+                    , by = "Variable") %>% 
+  mutate_at(vars(`Sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  arrange(TC, TC_decile) %>% 
+  select(Variable, `Odds Ratio`, P, `Sites with CAL`) %>%   
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss.")
+
+
+```
+
+```{r nutrients-by-TC1}
+nh_grps %>% select(SEQN, TC1_dec) %>% 
+  inner_join(dietary, by = "SEQN") %>% 
+  gather("Nutrient", "intake", -SEQN, -TC1_dec) %>% 
+  group_by(TC1_dec, Nutrient) %>% 
+     # Median intake among those with any intake
+   summarise(grms_intake = round(median(intake[intake>0]))) %>% 
+  ungroup() %>% 
+  
+  # Select only nutrients with strong correlations 
+  inner_join(cor_tc1 %>% 
+               enframe(name = "Nutrient", value = "tau") %>% 
+  filter(abs(tau)>0.15)
+  , by = "Nutrient") %>%
+  mutate(tau =  round(tau, 2)) %>% 
+  
+  # Label nutrient column
+  inner_join(diet_names, by = c("Nutrient" = "Variable Name")) %>% 
+  
+  spread(TC1_dec, grms_intake) %>%
+  select(Nutrient = Description, tau, matches("[0-9]{1}")) %>% 
+
+  arrange(desc(tau)) %>% 
+  kable(caption = "Median daily intake of nutrients by TC1 decile and correlation with TC1.")
+```
+```
+
+## Supplementary tables
+
+```{r food-drink-model}
+rob2_coef %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "SMQ020" ~ "Never smoked",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              Term == "Intake_Carbs_Drink" ~ "Carbohydrate intake - drinks",
+                              Term == "Intake_Carbs_Food" ~ "Carbohydrate intake - food",
+                              str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+  filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+
+  select(Variable, `Odds Ratio`, P) %>%   
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss.")
+```
+
+## Figures
+```{r dendrogram, fig.height = 11, fig.width=7, fig.cap="Dendrogram of food group intake produced using treelet transformation."}
+ggdendrogram(food_groups_dendro, rotate = T)
+```
+
+```{r treelet-loading-plots, fig.height=11, fig.width=7}
+ggplot(food_groups_loadings, aes(x = Variable, y = Value)) +
+  facet_wrap(~Component, nrow = 1) +
+  geom_bar(stat = "identity") + 
+  scale_y_continuous(breaks = c(0, 0.5)) +
+  coord_flip() + 
+  theme_light() +
+  ggtitle("Treelet Component loading from treelet transformation analysis of food group intake.")
+```
+
+```{r TC1-food-group-daily-intake, fig.height=5, fig.width=5.7, fig.cap = "Daily intake (g/day) of food groups by TC1 decile. Median g/day among those with any intake."}
+ggplot(ExtractTCIntake(daily_intake, 1, TC1_dec), aes(y = Variable, x = TC1_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  scale_fill_gradient(low = "black", high = "grey80", breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) + 
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC1 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+```{r TC7-food-group-daily-intake, fig.height=2, fig.width=5.7, fig.cap = "Daily intake of food groups by TC7 decile. Median g/day among those with any intake.", warning=FALSE}
+ggplot(ExtractTCIntake(daily_intake, 7, TC7_dec), aes(y = Variable, x = TC7_dec)) +
+  geom_tile(aes(fill = any_intake)) +
+  scale_fill_gradient(low = "black", high = "grey80", breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) +  
+  geom_text(aes(label = grms_intake), colour = "white") +
+  labs(x = "TC7 decile", y = "Food group") +
+  guides(fill = guide_colourbar(title = "Proportion with any intake")) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
