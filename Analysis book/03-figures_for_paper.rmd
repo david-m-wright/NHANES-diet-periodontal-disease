@@ -21,26 +21,26 @@ source(here("Code", "food_groups.R"))
 ```
 
 ## Figures for text
-NHANES respondents 2009-2014: `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8)))`
+NHANES respondents 2009-2014: `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8)))`   
 Persons aged $\geq30$ years: `r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
-                                    RIDAGEYR >= 30))`
+                                    RIDAGEYR >= 30))`   
 Persons aged $\geq30$ years with medical examination:`r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
                                     RIDAGEYR >= 30,
-                                    RIDSTATR == 2))`
+                                    RIDSTATR == 2))`   
 Persons aged $\geq30$ years with medical examination who are dentate:`r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
                                     RIDAGEYR >= 30,
                                     RIDSTATR == 2,
-                                    tooth_count > 0))`
+                                    tooth_count > 0))`   
 Persons aged $\geq30$ years with medical examination who are dentate and eligible for periodontal exam:
                             `r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
                                     RIDAGEYR >= 30,
                                     RIDSTATR == 2,
                                     tooth_count > 0,
-                                    EXCLU != 1))`
+                                    EXCLU != 1))`   
 Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam:
                             `r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
@@ -48,7 +48,7 @@ Persons aged $\geq30$ years with medical examination who are dentate, eligible a
                                     RIDSTATR == 2,
                                     tooth_count > 0,
                                     EXCLU != 1,
-                                    PDSTS == 1))`
+                                    PDSTS == 1))`   
 Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam with $\geq1$ sites assessed for clinical attachment loss:
                             `r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
@@ -57,7 +57,7 @@ Persons aged $\geq30$ years with medical examination who are dentate, eligible a
                                     tooth_count > 0,
                                     EXCLU != 1,
                                     PDSTS == 1,
-                                    CAL_sites_assessed > 0))`
+                                    CAL_sites_assessed > 0))`   
 Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam with $\geq1$ sites assessed for clinical attachment loss and had valid dietary data:
                             `r nrow(filter(nhanes_all, 
                                     between(SDDSRVYR, 6, 8),
@@ -68,18 +68,18 @@ Persons aged $\geq30$ years with medical examination who are dentate, eligible a
                                     PDSTS == 1,
                                     CAL_sites_assessed > 0,
                                     PD_sites_assessed > 0,
-                                    dietary == T))`
+                                    dietary == T))`   
 
-Mean age of the cohort: `r round(mean(nhanes$RIDAGEYR))`
-SD age of the cohort: `r round(sd(nhanes$RIDAGEYR), 1)`
-Percentage male: `r perc(sum(nhanes$RIAGENDR == 1)/length(nhanes$RIAGENDR))`
-Percentage with diabetes: `r perc(sum(nhanes$diabetes)/length(nhanes$diabetes))`
-Percentage ever smoked: `r perc(sum(nhanes$SMQ020 == 1)/length(nhanes$RIAGENDR))`
-25th, 50th and 75th percentiles of tooth count: `r quantile(nhanes$tooth_count, probs = c(0.25, 0.5, 0.75))`
-25th, 50th and 75th percentiles of proportion of sites with CAL $\geq3$mm: `r perc(quantile(nhanes$prop_CAL_sites3mm, probs = c(0.25, 0.5, 0.75)))`
-Strongest correlation among TC scores: $\tau=$ `r sort(na.omit(as.numeric(food_groups_tc_cor)))[1]`
-Correlation between intake of low calorie and regular carbonated drinks: r = `round(r food_groups_cor["BEV242", "BeV241"], digits = 2)`.
-Correlation between intake of Theobromine and TC7 score `r round(cor_tc7["THEO"], digits = 2)`
+Mean age of the cohort: `r round(mean(nhanes$RIDAGEYR))`   
+SD age of the cohort: `r round(sd(nhanes$RIDAGEYR), 1)`   
+Percentage male: `r perc(sum(nhanes$RIAGENDR == 1)/length(nhanes$RIAGENDR))`   
+Percentage with diabetes: `r perc(sum(nhanes$diabetes)/length(nhanes$diabetes))`   
+Percentage ever smoked: `r perc(sum(nhanes$SMQ020 == 1)/length(nhanes$RIAGENDR))`   
+25th, 50th and 75th percentiles of tooth count: `r quantile(nhanes$tooth_count, probs = c(0.25, 0.5, 0.75))`   
+25th, 50th and 75th percentiles of proportion of sites with CAL $\geq3$mm: `r perc(quantile(nhanes$prop_CAL_sites3mm, probs = c(0.25, 0.5, 0.75)))`   
+Strongest correlation among TC scores: $\tau=$ `r sort(na.omit(as.numeric(food_groups_tc_cor)))[1]`   
+Correlation between intake of low calorie and regular carbonated drinks: r = `round(r food_groups_cor["BEV242", "BeV241"], digits = 2)`      
+Correlation between intake of Theobromine and TC7 score `r round(cor_tc7["THEO"], digits = 2)`   
 
 ## Tables
 ```{r food-groups-included}
