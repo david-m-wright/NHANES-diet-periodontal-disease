@@ -1,16 +1,22 @@
 # Analysis of food group intake and periodontal disease measures from NHANES
 
-require(tidyverse)
-require(treelet) # For treelet transform
-require(betareg) # For Beta regression
-require(Formula) # For multipart formulas used in Beta regression
-require(lmtest) # For likelihood ratio tests of Beta regressions
-require(quantreg) # For quantile regression
-require(lqr) # For logistic quantile regression
-require(cdfquantreg) # For logistic quantile regression (more recent package)
-require(ggdendro)
-require(splines)
-require(broom)
+library(tidyverse)
+library(treelet) # For treelet transform
+library(betareg) # For Beta regression
+library(Formula) # For multipart formulas used in Beta regression
+library(lmtest) # For likelihood ratio tests of Beta regressions
+library(quantreg) # For quantile regression
+library(lqr) # For logistic quantile regression
+library(cdfquantreg) # For logistic quantile regression (more recent package)
+library(ggdendro)
+library(splines)
+library(broom)
+
+# Comparison of total food weight and total energy intake 
+food_energy_weight <- food_total_grms_per_day %>% 
+  inner_join(nhanes, by = "SEQN") %>% 
+  select(KCAL, GRMS)
+
 
 cat("\n Treelet analysis on food groups\n")
 
@@ -34,8 +40,11 @@ bevs_included <- names(select(food_groups_nhanes, matches("BEV|WATER")))
 
 # Scale by overall energy intake
 food_groups_scl <- food_groups_nhanes %>% 
-  mutate_at(vars(-SEQN), ~./nhanes$KCAL) %>% 
-  select(-SEQN) %>%
+    mutate_at(vars(-SEQN), ~./nhanes$KCAL) %>% 
+  # Alternative scaling by total quantity consumed
+  #mutate_at(vars(-SEQN), ~./food_total_grms_per_day$GRMS) %>% 
+  
+    select(-SEQN) %>%
   scale()
 
 food_groups_cor <- cor(food_groups_scl)
@@ -304,13 +313,19 @@ age47 <- rob_pred_frame %>%
   as.numeric() %*% rob1$beta %>% 
   invlogit()*100
 
+age46 <- rob_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 46])) %>% 
+  as.numeric() %*% rob1$beta %>% 
+  invlogit()*100
+
 age45 <- rob_pred_frame %>% 
   mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 45])) %>% 
   as.numeric() %*% rob1$beta %>% 
   invlogit()*100
 
-age59 <- rob_pred_frame %>% 
-  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 59])) %>% 
+
+age61 <- rob_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 61])) %>% 
   as.numeric() %*% rob1$beta %>% 
   invlogit()*100
 
@@ -423,12 +438,61 @@ rob2 <- Log.lqr(rob2_matrix, y = nh_grps$prop_CAL_sites3mm, p = 0.5)
 # Extract coefficients 
 rob2_coef <- bind_cols(Term = colnames(rob2_matrix),
                        as_tibble(rob2$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+cat("\n Treelet analysis on food groups completed")
+
+
+# Robust regression excluding those with low tooth count
+
+# Model the median
+rob3 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm[nh_grps$tooth_count>=20], 
+                x = model.matrix(rob_mod, data = nh_grps[nh_grps$tooth_count>=20,]),
+                p = 0.5)
+
+# Extract coefficients for median model
+rob3_coef <- bind_cols(Term = colnames(model.matrix(rob_mod, data = nh_grps[nh_grps$tooth_count>=20,])),
+                       as_tibble(rob3$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+### Analysis of tooth count ###
+
+
+# Model the median
+tooth1 <- Log.lqr(y = nh_grps$tooth_count, 
+                  a =1, b = 32,
+                x = model.matrix(rob_mod, data = nh_grps),
+                p = 0.5)
+
+tooth1_coef <- bind_cols(Term = colnames(model.matrix(rob_mod, data = nh_grps)),
+                       as_tibble(tooth1$table, .name_repair = "minimal")) %>% 
   mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)#,
          # Why are these values so high?
          #"Predicted proportion" = round(invlogit(ifelse(Term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)), 2)
   ) %>% 
   rename(Sig = V1)
 
-cat("\n Treelet analysis on food groups completed")
+
+
+# Truncate tooth count at 28
+nh_grps$tooth_count_trunc <- if_else(nh_grps$tooth_count > 28, as.integer(28), nh_grps$tooth_count)
+
+# Model the median
+tooth2 <- Log.lqr(y = nh_grps$tooth_count_trunc, 
+                  a =1, b = 28,
+                  x = model.matrix(rob_mod, data = nh_grps),
+                  p = 0.5)
+
+tooth2_coef <- bind_cols(Term = colnames(model.matrix(rob_mod, data = nh_grps)),
+                         as_tibble(tooth1$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)#,
+         # Why are these values so high?
+         #"Predicted proportion" = round(invlogit(ifelse(Term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)), 2)
+  ) %>% 
+  rename(Sig = V1)
+
 
 

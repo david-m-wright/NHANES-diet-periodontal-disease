@@ -1,8 +1,8 @@
 # Analysis of diet and periodontal disease measures from NHANES
 # Joining of NHANES datasets
 # Using average of two 24hour recall periods
-require(here)
-require(tidyverse)
+library(here)
+library(tidyverse)
 
 source(here("Code", "prepare_periodontal_data.R"))
 source(here("Code", "prepare_dietary_data.R"))

@@ -3,7 +3,7 @@ library(here)
 library(bookdown)
 library(servr)
 library(checkpoint)
-checkpoint("2019-07-31")
+checkpoint("2019-07-31", use.knitr = T)
 
 setwd(here("Analysis book"))
 

@@ -1,8 +1,8 @@
 # Functions to use when manipulating datasets
 
-require(tidyverse)
-require(broom)
-require(scales)
+library(tidyverse)
+library(broom)
+library(scales)
 
 # Percentage formatter
 perc <- scales::percent_format()

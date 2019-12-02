@@ -37,9 +37,11 @@ fgrp %>%
 
 An important modelling decision is how to adjust for total energy intake when determining dietary patterns. The initial approach (as in the nutrient intake chapter) was to use correlations of raw intake quantities (g/day) as the input to the Treelet algorithm and then adjust for total energy intake (`KCAL`) in regression modelling of the outcome. There was no association between `KCAL` and CAL outcomes indicating that the observed effects were largely independent of energy intake.
 
-However, when the median intakes of food groups were compared by TC score it became apparent that some of the TCs were highly correlated with overall quantity of food intake. For example, higher intake of almost all food groups was found in  high deciles of the first treelet component. This may have occured simply because when consuming more, the probability of including a greater variety of items (at reasonable quantities) increases. Consuming more of everything is not a sensible dietary recommendation so the problem remains how to separate the dietary patterns from the overall quantities consumed.
+However, when the median intakes of food groups were compared by TC score it became apparent that some of the TCs were highly correlated with overall quantity of food intake. For example, higher intake of almost all food groups was found in  high deciles of the first treelet component. This may have occured simply because when consuming more, the probability of including a greater variety of items (at reasonable quantities) increases. Consuming more of everything is not a sensible dietary recommendation so the problem remains how to separate the dietary patterns from the overall quantities consumed. Also, older people who are more likely to have perionditis are also likely to consume less food.
 
 The approach chosen was to scale the intakes of each food group by the total energy consumption for that individual to give an indication of the proportion of the diet attributable to that food group. This was done crudely by dividing the grammes intake by total `KCAL` however this does not account for the differences in energy values between foods and may downweight the foods never consumed in large quantities.
+
+Another approach would be to scale by total food weight consumed. There was a moderate positive correlation between total energy intake and total weight consumed (r = `r round(cor(food_energy_weight$KCAL, food_energy_weight$GRMS), 2)`, P `r format.pval(cor.test(food_energy_weight$KCAL, food_energy_weight$GRMS)$p.value, eps = 0.001)`). 
 
 When comparing the initial raw quantity analysis with an analysis of variables scaled by `KCAL` the cluster trees were similar but the variables included in each TC and the loadings were not. `KCAL` was also excluded from the regression models to avoid overadjustment. When plotting the resulting TC deciles against unadjusted daily intake (g) the summaries no longer give the impression that simply consuming more is better. 
 
@@ -496,3 +498,89 @@ kable(rob2_coef, caption = "Estimates from robust logistic quantile regression o
 ```
 
 
+### Associations excluding those with low tooth count 
+
+The robust regression was completed excluding those with <20 teeth to determine whether the assocation between TC1 and TC7 persisted. Both associations were substantially unchanged so the observed effects were not entirely driven by those with low tooth count.
+
+```{r robust-coefficients}
+kable(rob3_coef, caption = "Estimates from robust logistic quantile regression on CAL. Coefficients and odds ratios  given. Excludes individuals with <20 teeth.")
+```
+
+
+## Tooth count and food groups   
+
+A limitation of using proportion of sites with CAL $\geq$ 3mm as the measure of periodontal disease is that it does not account for tooth loss. The main cause of tooth loss within adults is periodontitis. 
+
+Tooth count showed a strongly left-skewed distribution with peaks at 28 and 32 teeth. 
+
+```{r tooth-count}
+nhanes %>% 
+  count(tooth_count) %>% 
+  ggplot(aes(x = tooth_count, y = n)) +
+  geom_col() +
+  theme_light() +
+  labs(x = "Tooth count")
+
+```
+
+Median CAL extent increased with decreasing tooth count, highlighting the link between periodontitis and tooth loss.
+
+```{r tooth-loss-CAL}
+nhanes %>%
+  mutate(tooth_count = as_factor(tooth_count)) %>% 
+  ggplot(aes(x = tooth_count, y = prop_CAL_sites3mm)) +
+  geom_boxplot(outlier.shape = NA) +
+  theme_light() +
+  labs(x = "Tooth count", y = expression("Proportion of sites with CAL">="3mm"))
+```
+
+A large proportion of those with CAL at more than half of assessed sites had <20 teeth and almost all of those with CAL at all sites had <20 teeth. 
+
+```{r CAL-tooth-loss}
+nhanes %>% 
+  mutate(`Tooth count < 20` = tooth_count < 20) %>% 
+  ggplot(aes(x = prop_CAL_sites3mm)) +
+  geom_histogram(aes(fill = `Tooth count < 20`), bins = 40) + 
+  theme_light() +
+  labs(x = expression("Proportion of sites with CAL">="3mm"), y = "Count")
+
+```
+
+
+```{r tooth-count-by-TC1}
+nh_grps %>% 
+  group_by(TC1_dec) %>% 
+  summarise(`<20 teeth (%)` = sum(tooth_count<20)/length(tooth_count)*100) %>% 
+  kable(caption = "Percentage of individuals with low tooth count by TC1 decile.", digits = 1)
+```
+
+
+```{r tooth-count-by-TC7}
+nh_grps %>% 
+  group_by(TC7_dec) %>% 
+  summarise(`<20 teeth (%)` = sum(tooth_count<20)/length(tooth_count)*100) %>% 
+  kable(caption = "Percentage of individuals with low tooth count by TC7 decile.", digits = 1)
+```
+
+
+```{r robust-quantile-histogram, include = FALSE}
+#Robust logistic regression was used to model tooth count but substantially overpredicted throughout.
+
+nh_grps %>% transmute(Measurement = "Actual", value = tooth_count) %>% 
+  bind_rows(round(invlogit(tooth1$fitted.values)*32) %>% 
+              enframe() %>% 
+              mutate(Measurement = "Predicted: robust quantile (decile)")) %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(aes(fill = Measurement), bins = 32, position = "dodge") +
+  theme_light() +
+   labs(y = "Tooth count", x = "Count")
+
+nh_grps %>% transmute(Measurement = "Actual", value = tooth_count_trunc) %>% 
+  bind_rows(round(invlogit(tooth2$fitted.values)*28) %>% 
+              enframe() %>% 
+              mutate(Measurement = "Predicted: robust quantile (decile)")) %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(aes(fill = Measurement), bins = 28, position = "dodge") +
+  theme_light() +
+   labs(y = "Tooth count", x = "Count")
+```

@@ -1,9 +1,9 @@
 # Analysis of diet and periodontal disease measures from NHANES
 # Preparation of NHANES dental examination and periodontal data
 
-require(tidyverse)
-require(haven)
-require(here)
+library(tidyverse)
+library(haven)
+library(here)
 
 # Function to drop wave specific 3 letter prefixes from NHANES periodontal variable names
 # Arguments:

@@ -1,12 +1,12 @@
 # Analysis of nutrient intake and periodontal disease measures from NHANES
-require(tidyverse)
-require(treelet) # For treelet transform
-require(betareg) # For Beta regression
-require(Formula) # For multipart formulas used in Beta regression
-require(lmtest) # For likelihood ratio tests of Beta regressions
-require(ggdendro)
-require(splines)
-require(broom)
+library(tidyverse)
+library(treelet) # For treelet transform
+library(betareg) # For Beta regression
+library(Formula) # For multipart formulas used in Beta regression
+library(lmtest) # For likelihood ratio tests of Beta regressions
+library(ggdendro)
+library(splines)
+library(broom)
 
 cat("\n Running treelet analysis on nutrients\n")
 

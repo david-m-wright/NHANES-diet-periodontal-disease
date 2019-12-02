@@ -2,10 +2,10 @@
 # Preparation of NHANES dietary data
 # Averaging over two 24 hour recall periods
 
-require(here)
-require(tidyverse)
-require(haven)
-require(fuzzyjoin)
+library(here)
+library(tidyverse)
+library(haven)
+library(fuzzyjoin)
 
 
 ### Helper function ###
