@@ -1,10 +1,18 @@
 # Nutrient intake and periodontal disease {#nutrient}
-Chapter compiled **`r Sys.Date()`**
+
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = F)
 library(knitr)
+knitr::opts_chunk$set(echo = F)
 library(here)
+library(checkpoint)
+checkpoint_date <- "2019-07-31"
+checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
+
 ```
+
+Chapter compiled **`r Sys.Date()`**  
+
+R checkpoint **`r checkpoint_date`**   
 
 These notes describe analysis of associations between dietary nutrient intake and periodontal outcomes. Data were drawn from NHANES waves F to H (2009/10 to 2013/14). These waves were selected because they included full mouth periodontal examinations (waves A to C had only half mouth examinations).
 

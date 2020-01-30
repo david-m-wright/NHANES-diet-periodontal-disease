@@ -110,3 +110,40 @@ food_grps_per_day <- food_grps_per_day %>%
 #   inner_join(select(nhanes, SEQN), by = "SEQN")
 
 cat("\n Cohort prepared")
+
+# Comparison of total food weight and total energy intake 
+food_energy_weight <- food_total_grms_per_day %>% 
+  inner_join(nhanes, by = "SEQN") %>% 
+  select(KCAL, GRMS)
+
+# Define food groups
+food_groups_nhanes <- food_grps_grms_per_day %>% 
+  
+  select(SEQN, 
+         matches("BEV(0|21|22|231|232|233|241|242)$"),
+         EGG0,
+         matches("FAT(1|2)$"),
+         matches("FRUIT(11|2|31|32|33|34|35)$"),
+         matches("GRAIN(1|21|22|23|3|4|5|6)$"),
+         matches("MEAT(1|2|3|4|5|6|7|8)$"),
+         matches("MILK(11|2|3|4)$"),
+         matches("SUGAR(1|2)$"),
+         matches("VEG(1|2|3|4|5|6|7|8)$"),
+         WATER1)
+
+# List of groups of beverages included
+bevs_included <- names(select(food_groups_nhanes, matches("BEV|WATER")))
+
+# Scale by overall energy intake
+food_groups_scl <- food_groups_nhanes %>% 
+  mutate_at(vars(-SEQN), ~./nhanes$KCAL) %>% 
+  # Alternative scaling by total quantity consumed
+  #mutate_at(vars(-SEQN), ~./food_total_grms_per_day$GRMS) %>% 
+  
+  select(-SEQN) %>%
+  scale()
+
+food_groups_cor <- cor(food_groups_scl)
+
+
+cat("\n Food groups prepared")

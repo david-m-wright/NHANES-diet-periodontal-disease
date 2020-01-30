@@ -1,0 +1,144 @@
+# PCA of food groups {#food-groups-PCA}
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
+library(here)
+library(checkpoint)
+checkpoint_date <- "2020-01-28"
+checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
+library(tidyverse)
+```
+
+Chapter compiled **`r Sys.Date()`**
+
+R checkpoint **`r checkpoint_date`**   
+
+```{r prepare-modelling-dataset, include=FALSE}
+source(here("Code", "diet_periodontal.R"))
+source(here("Code", "helper_functions.R"))
+```
+
+```{r treelet-analysis-food-groups-PCA, include = F}
+source(here("Code", "treelet_food_groups.R"))
+source(here("Code", "food_groups_PCA.R"))
+```
+
+## PCA analysis of food group intake data
+
+A reviewer of the _AJCN_ manuscript suggested that the findings form the treelet analysis should be contrasted with those of PCA as it is more widely used in nutritional epidemiology.
+
+PCA was peformed on the scaled food group intake data (i.e. the same dataset used for the treelet analysis). To match the treelet analysis as closely as possible the first 8 Principal Components (PCs) were extracted. The scree plot indicates that this is a reasonable decision.
+
+```{r PCA-scree-plot}
+tibble(Variance = pca_food_groups$sdev^2) %>% 
+  mutate(Component = row_number()) %>% 
+  ggplot(aes(x = Component, y = Variance)) +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  ggtitle("Scree plot for PCA of food group intake data")
+```
+
+Distribution of PC scores generally followed normal distributions although there was a slight left skew for PC1.
+
+```{r PC-score-distributions}
+food_groups_pc_scores %>% 
+  as_tibble() %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 50) + 
+  facet_wrap(~key) +
+  theme_light() +
+  labs(x = "PC score", y = "Frequency") + 
+  ggtitle("Distribution of Principal Component scores for food group analysis")
+```
+
+The complete loading plot for the first eight PCs contained a large number of very small loadings and so it was decided to attempt to interpret only larger loadings and only for PCs associated with clinical attachment loss.
+
+```{r PC-loading-plots, fig.height=11, fig.width=7}
+ggplot(food_groups_pc_loadings, aes(x = Variable, y = Value)) +
+  facet_wrap(~Component, nrow = 1) +
+  geom_bar(stat = "identity") + 
+  scale_y_continuous(breaks = c(0, 0.5)) +
+  coord_flip() + 
+  theme_light() +
+  ggtitle("PC loading plot for analysis of food group intake")
+```
+
+
+## Modelling associations between clinical attachment loss and PCs
+
+Robust quantile regression was used to estimate the associations between each of the first eight PCs and extent of clinical attachment loss (CAL). Only PC1, PC6 and PC8 showed strong evidence of an association with CAL, with increasing PC score associated with reduced CAL extent.
+
+
+```{r robust-coefficients-pca}
+rob1_coef_pca %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "SMQ020" ~ "Never smoked",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              str_detect(Term, "(PC[0-9{1}])_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+                              #str_detect(Term, "(PC1|PC7|PC8)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+  filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+  
+kable(caption = "Association between dietary Principal Component scores, adjustment variables and extent of clinical attachment loss.")
+
+```
+
+The magnitude of the variation observed with these PCs was similar to that observed for TCs.
+
+
+```{r selected-robust-coefficients-pca}
+rob1_coef_pca %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "SMQ020" ~ "Never smoked",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              str_detect(Term, "(PC1|PC6|PC8)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+  filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+   
+   full_join(rbind(PC1_medians %>% 
+                    mutate(PC = "PC1"),
+                  PC6_medians %>% 
+                      mutate(PC = "PC6"),
+                  PC8_medians %>% 
+                    mutate(PC = "PC8")) %>% 
+              filter(str_detect(Measurement, "robust")) %>% 
+               mutate(Variable = paste(PC, "Decile", PC_decile),
+                        `Median sites with CAL` = percent(value, accuracy = 0.1))
+                    , by = "Variable") %>%
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>%
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>%
+  arrange(PC, PC_decile) %>%
+  select(Variable, `Odds Ratio`, P, `Median sites with CAL`) %>%
+kable(caption = "Association between dietary Principal Component scores, adjustment variables and extent of clinical attachment loss.", digits = 2)
+```
+
+
+PC1 characterised diets high in salads, vegetables, cereals, dairy products, yeast breads, seafood and fruits with coffee or tea to drink. High PC1 scores also indicated low intake of mixed grains and regular carbonated soft drinks, alchol and regular fruit juice drinks. The dietary pattern identified is similar to TC1 and TC2 compounded.
+
+High PC6 scores indicated high intake of milk and ready-to-eat cereals, salads, low calorie carbonated soft drinks, crackers, popcorn, pretzels and corn chips, cakes, cookies, pastries and pies. PC6 loaded on low intake of sausages and yeast bread, rice, eggs, sugar, apples, bananas, water, tea, coffee, regular fruit juice drinks or fruit flavoured drinks.   
+PC8 characterised high intake of coffee, tea, sugar, yogurt, crackers, milk desserts, mixed meats, low calorie carbonated soft drinks, regular fruit juice drinks and fruit flavoured beverages, cakes, cookies, pastries and pies. PC8 loaded on low intake of sausages and yeast break, milk, and ready-to-eat cereals, water, grain mixtures, citrus juices, beef, regular carbonated soft drinks and alcohol.
+
+PC6 and PC8 are more difficult to relate to TCs. Elements of TC7 can be obseved for low calorie carbonated soft drinks and crackers, pretzels etc. 
+
+
+```{r PC-loading-plots-filtered, fig.height=11, fig.width=7}
+food_groups_pc_loadings %>% 
+  filter(abs(Value) > 0.1) %>% 
+ggplot(aes(x = Variable, y = Value)) +
+  facet_wrap(~Component, nrow = 1) +
+  geom_bar(stat = "identity") + 
+  scale_x_discrete(drop = FALSE) +
+  scale_y_continuous(breaks = c(0, 0.5)) +
+  coord_flip() + 
+  theme_light() +
+  ggtitle("PC loading plot for analysis of food group intake with small loadings removed (|values|<0.1)")
+```

@@ -1,12 +1,19 @@
 # Food groups and periodontal disease {#food-groups}
-Chapter compiled **`r Sys.Date()`**
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
 library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
 library(here)
+library(checkpoint)
+checkpoint_date <- "2019-07-31"
+checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
 library(tidyverse)
 ```
+
+Chapter compiled **`r Sys.Date()`**    
+
+R checkpoint **`r checkpoint_date`**   
+
 
 The previous chapter detailed treelet transformation of NHANES dietary data and associations with periodontal outcomes. Whilst many of the nutrient groupings identified by the TCs were sensible, it was not possible to determine which types of *diet* provided these nutrients. This chapter focuses on associations between diet (rather than nutrient intake) and periodontal disease in an effort to extract real-world dietary patterns that could form the basis for diet recommendations to improve periodontal outcomes.
 
@@ -19,6 +26,7 @@ source(here("Code", "helper_functions.R"))
 ```
 
 ```{r treelet-analysis-food-groups, include = F}
+source(here("Code", "treelet_food_groups.R"))
 source(here("Code", "food_groups.R"))
 ```
 
@@ -502,7 +510,7 @@ kable(rob2_coef, caption = "Estimates from robust logistic quantile regression o
 
 The robust regression was completed excluding those with <20 teeth to determine whether the assocation between TC1 and TC7 persisted. Both associations were substantially unchanged so the observed effects were not entirely driven by those with low tooth count.
 
-```{r robust-coefficients}
+```{r robust-coefficients-tooth-count}
 kable(rob3_coef, caption = "Estimates from robust logistic quantile regression on CAL. Coefficients and odds ratios  given. Excludes individuals with <20 teeth.")
 ```
 
@@ -563,7 +571,7 @@ nh_grps %>%
 ```
 
 
-```{r robust-quantile-histogram, include = FALSE}
+```{r robust-quantile-histogram-tooth-count, include = FALSE}
 #Robust logistic regression was used to model tooth count but substantially overpredicted throughout.
 
 nh_grps %>% transmute(Measurement = "Actual", value = tooth_count) %>% 

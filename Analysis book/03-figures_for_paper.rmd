@@ -1,15 +1,21 @@
 # Figures and tables for publication {#paper}
-Chapter compiled **`r Sys.Date()`**
-
-This chapter comprises the figures and tables describing these analyses for publication.
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE)
 library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
 library(here)
+library(checkpoint)
+checkpoint_date <- "2019-07-31"
+checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
 library(tidyverse)
 ```
 
+Chapter compiled **`r Sys.Date()`**   
+
+R checkpoint **`r checkpoint_date`**   
+
+
+This chapter comprises the figures and tables describing these analyses as submitted to the _American Journal for Clinical Nutrition_.
 
 ```{r prepare-modelling-dataset, include=FALSE}
 source(here("Code", "diet_periodontal.R"))
@@ -17,6 +23,7 @@ source(here("Code", "helper_functions.R"))
 ```
 
 ```{r run-analyses, include=FALSE}
+source(here("Code", "treelet_food_groups.R"))
 source(here("Code", "food_groups.R"))
 ```
 

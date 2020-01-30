@@ -1,9 +1,8 @@
 # Bookdown build script
+library(knitr)
 library(here)
 library(bookdown)
 library(servr)
-library(checkpoint)
-checkpoint("2019-07-31", use.knitr = T)
 
 setwd(here("Analysis book"))
 
@@ -15,6 +14,7 @@ setwd(here("Analysis book"))
 #preview_chapter("02-food_groups.Rmd")
 #preview_chapter("03-figures_for_paper.Rmd")
 #preview_chapter("04-references.rmd")
+#preview_chapter("05-food_groups_PCA.Rmd")
 
 # Render the entire book
 bookdown::render_book("index.Rmd", "bookdown::gitbook")
