@@ -95,7 +95,11 @@ perio_pocket <- perio_raw %>%
   # Number of sites per mouth with PD over threshold
   summarise(PD_sites_assessed = sum(!is.na(value)),
             PD_sites4mm = sum(PD4mm, na.rm = T),
-            PD_sites6mm = sum(PD6mm, na.rm = T))
+            PD_sites6mm = sum(PD6mm, na.rm = T),
+            # Proportion of sites per mouth with PD
+            prop_PD_sites4mm = PD_sites4mm/PD_sites_assessed,
+            # Mean PD (mm) per mouth
+            PD_mouth_mean = mean(value, na.rm =T))
 
 
 

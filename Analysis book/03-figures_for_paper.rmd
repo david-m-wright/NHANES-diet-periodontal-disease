@@ -91,8 +91,18 @@ Predicted CAL extent for male, non-smoker, non-diabetic in decile 5 for each TC,
 Predicted CAL extent for male, non-smoker, non-diabetic in decile 5 for each TC, aged 61: `r round(age61, 1)`    
 Percentage of the sample with <20 teeth: `r round(prop.table(table(nhanes$tooth_count<20))[["TRUE"]]*100, 1)`   
 
+Percentage of cohort with only one recorded 24 hour recall: `r perc(sum(food_total_grms_per_day$DRDINT == 1)/nrow(food_total_grms_per_day))`    
+
+Mean CAL at site level: `r round(mean(perio_cal_site$value), 1)`
+Mean of proportion of sites with CAL $\geq3$mm: `r mean(nhanes$prop_CAL_sites3mm)`
+Proportion of individuals with at least one site with CAL $\geq3$mm: `r round(sum(nhanes$CAL_sites3mm > 0)/nrow(nhanes)*100)`
+Mean PPD at site level: `r round(mean(perio_pocket_site$value), 1)`
+Mean of proportion of sites with PPD $\geq4$mm: `r mean(nhanes$prop_PD_sites4mm)`
+Proportion of individuals with at least one site with PPD $\geq4$mm: `r round(sum(nhanes$PD_sites4mm > 0)/nrow(nhanes)*100)`
+
 
 ## Tables
+
 ```{r food-groups-included}
 fgrp %>% 
   select(grp_code, grp_description) %>% 
@@ -117,6 +127,7 @@ rob1_coef %>%
             `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
             P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
   
+  # Add the predicted CAL medians
   full_join(TC1_medians %>% 
               mutate(TC = "TC1") %>% 
               rbind(TC7_medians %>% 
@@ -125,10 +136,15 @@ rob1_coef %>%
               mutate(Variable = paste(TC, "Decile", TC_decile),
                         `Median sites with CAL` = perc(value))
                     , by = "Variable") %>% 
+  
+  # Add other periodontal measures
+  left_join(bind_rows(TC1_perio, TC7_perio), by = "Variable") %>% 
+  
   mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
   mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
   arrange(TC, TC_decile) %>% 
-  select(Variable, `Odds Ratio`, P, `Median sites with CAL`) %>%   
+  select(Variable, `Odds Ratio`, P, 
+         `Median sites with CAL`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>%   
 kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss.")
 
 ```
@@ -153,10 +169,39 @@ nh_grps %>% select(SEQN, TC1_dec) %>%
   inner_join(diet_names, by = c("Nutrient" = "Variable Name")) %>% 
   
   spread(TC1_dec, grms_intake) %>%
-  select(Nutrient = Description, tau, matches("[0-9]{1}")) %>% 
+  mutate(TC = 1) %>% 
+  select(TC, Nutrient = Description, tau, matches("[0-9]{1}")) %>% 
 
   arrange(desc(tau)) %>% 
-  kable(caption = "Median daily intake of nutrients by TC1 decile and correlation with TC1.")
+
+  bind_rows(
+    nh_grps %>% select(SEQN, TC7_dec) %>% 
+  inner_join(dietary, by = "SEQN") %>% 
+  gather("Nutrient", "intake", -SEQN, -TC7_dec) %>% 
+  group_by(TC7_dec, Nutrient) %>% 
+     # Median intake among those with any intake
+   summarise(grms_intake = round(median(intake[intake>0]))) %>% 
+  ungroup() %>% 
+  
+  # Select only nutrients with strong correlations 
+  inner_join(cor_tc7 %>% 
+               enframe(name = "Nutrient", value = "tau") %>% 
+  filter(abs(tau)>0.15)
+  , by = "Nutrient") %>%
+  mutate(tau =  round(tau, 2)) %>% 
+  
+  # Label nutrient column
+  inner_join(diet_names, by = c("Nutrient" = "Variable Name")) %>% 
+  
+  spread(TC7_dec, grms_intake) %>%
+    mutate(TC = 7) %>% 
+  select(TC, Nutrient = Description, tau, matches("[0-9]{1}")) %>% 
+    
+
+  arrange(desc(tau)) 
+  ) %>% 
+  
+    kable(caption = "Median daily intake of nutrients by TC decile and correlation with TC.")
 ```
     
     
@@ -171,19 +216,56 @@ rob2_coef %>%
                               Term == "Intake_Carbs_Drink" ~ "Carbohydrate intake - drinks",
                               Term == "Intake_Carbs_Food" ~ "Carbohydrate intake - food",
                               str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+   filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+  
+  # Add the predicted CAL medians
+  full_join(TC1_medians_rob2 %>% 
+              mutate(TC = "TC1") %>% 
+              rbind(TC7_medians_rob2 %>% 
+                      mutate(TC = "TC7")) %>% 
+              filter(str_detect(Measurement, "robust")) %>% 
+              mutate(Variable = paste(TC, "Decile", TC_decile),
+                        `Median sites with CAL` = perc(value))
+                    , by = "Variable") %>% 
+  
+  
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  arrange(TC, TC_decile) %>% 
+  select(Variable, `Odds Ratio`, P, 
+         `Median sites with CAL`) %>% 
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss.")
+```
+
+```{r selected-robust-coefficients-multivariate-nutrient-density}
+rob4_coef %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "SMQ020" ~ "Never smoked",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
   filter(!is.na(Variable)) %>% 
   transmute(Variable,         
             `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
             P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
-
+  
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  #arrange(TC, TC_decile) %>% 
   select(Variable, `Odds Ratio`, P) %>%   
-kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss.")
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss. Additional adjustment for total nutrient intake using the multivariate nutrient density model.")
+
 ```
+
+
 
 ## Figures
 ```{r dendrogram, fig.height = 11, fig.width=7, fig.cap="Dendrogram of food group intake produced using treelet transformation."}
 ggdendrogram(food_groups_dendro, rotate = T) +
-  geom_hline(linetype = 2, yintercept = 28)
+  geom_hline(linetype = 2, yintercept = 28) +
+  ggsave(here("Papers", "revision", "fig2.tiff"), device = "tiff", dpi = 300, width = 7, height = 8, units = "in", compression = "lzw", type = "cairo")
 ```
 
 ```{r treelet-loading-plots, fig.height=11, fig.width=7}
@@ -191,32 +273,59 @@ ggplot(food_groups_loadings, aes(x = Variable, y = Value)) +
   facet_wrap(~Component, nrow = 1) +
   geom_bar(stat = "identity") + 
   scale_y_continuous(breaks = c(0, 0.5)) +
-  labs(y = "Factor loading", x = "Food Group") +
+  labs(y = "Component loading", x = "Food Group") +
   coord_flip() + 
-  theme_light()
+  theme_light() +
+  ggsave(here("Papers", "revision", "fig3.tiff"), device = "tiff", dpi = "print", width = 7, height = 11, units = "in", compression = "lzw", type = "cairo")
 
 ```
 
-```{r TC1-food-group-daily-intake, fig.height=5, fig.width=5.7, fig.cap = "Daily intake (g/day) of food groups by TC1 decile. Median g/day among those with any intake."}
-ggplot(ExtractTCIntake(daily_intake, 1, TC1_dec), aes(y = Variable, x = TC1_dec)) +
+```{r TC1-food-group-daily-intake, fig.height=5, fig.width=5.7, fig.cap = "Daily intake (g/day) of food groups by TC1 decile. Median g/day among those with any intake.", message=FALSE}
+ExtractTCIntake(daily_intake, 1, TC1_dec) %>% 
+  mutate(text_col = if_else(any_intake > 0.5, "white", "black")) %>% 
+ggplot(aes(y = Variable, x = TC1_dec)) +
   geom_tile(aes(fill = any_intake)) +
-  scale_fill_gradient(low = "black", high = "grey80", breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) + 
-  geom_text(aes(label = grms_intake), colour = "white") +
+  scale_fill_gradient(high = "black", low = "white", breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) +
+   geom_text(aes(label = grms_intake, colour = text_col)) +
+  scale_colour_identity()+
   labs(x = "TC1 decile", y = "Food group") +
   guides(fill = guide_colourbar(title = "Proportion with any intake")) +
   theme_minimal() +
-  theme(legend.position = "top")
+  theme(legend.position = "top") +
+   ggsave(here("Papers", "revision", "fig4.tiff"), device = "tiff", dpi = "print", width = 5.7, height = 5, units = "in", compression = "lzw", type = "cairo")
+
 ```
 
-```{r TC7-food-group-daily-intake, fig.height=2, fig.width=5.7, fig.cap = "Daily intake of food groups by TC7 decile. Median g/day among those with any intake.", warning=FALSE}
+```{r TC7-food-group-daily-intake, fig.height=2, fig.width=5.7, fig.cap = "Daily intake of food groups by TC7 decile. Median g/day among those with any intake.", warning=FALSE, message = FALSE}
 ExtractTCIntake(daily_intake, 7, TC7_dec) %>% 
-  filter(TC7_dec %in% c("1","2","3") == F) %>% 
+  mutate(text_col = if_else(any_intake > 0.5, "white", "black")) %>% 
+    filter(TC7_dec %in% c("1","2","3") == F) %>% 
 ggplot(aes(y = Variable, x = TC7_dec)) +
   geom_tile(aes(fill = any_intake)) +
-  scale_fill_gradient(low = "black", high = "grey80", breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) +  
-  geom_text(aes(label = grms_intake), colour = "white") +
+   scale_fill_gradient(high = "black", low = "white", breaks = c(0, 0.2, 0.4, 0.6, 0.8,1), limits = c(0,1)) +
+  geom_text(aes(label = grms_intake, colour = text_col)) +
+  scale_colour_identity() +
   labs(x = "TC7 decile", y = "Food group") +
   guides(fill = guide_colourbar(title = "Proportion with any intake")) +
   theme_minimal() +
-  theme(legend.position = "top")
+  theme(legend.position = "top") +
+    ggsave(here("Papers", "revision", "fig5.tiff"), device = "tiff", dpi = "print", width = 5.7, height = 2, units = "in", compression = "lzw", type = "cairo")
+
 ```
+
+```{r CAL-age, fig.cap = "Mean CAL (site level) by age."}
+perio_cal_site %>% 
+  group_by(RIDAGEYR) %>% 
+  summarise(`Mean CAL` = mean(value)) %>% 
+  ggplot(aes(x = RIDAGEYR, y =  `Mean CAL`)) + 
+  geom_line()
+```
+
+```{r PPD-age, fig.cap = "Mean pocket depth (site level) by age."}
+perio_pocket_site %>% 
+  group_by(RIDAGEYR) %>% 
+  summarise(`Mean CAL` = mean(value)) %>% 
+  ggplot(aes(x = RIDAGEYR, y =  `Mean CAL`)) + 
+  geom_line()
+```
+

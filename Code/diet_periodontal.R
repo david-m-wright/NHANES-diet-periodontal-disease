@@ -109,6 +109,23 @@ food_grps_per_day <- food_grps_per_day %>%
 # food_grps_sugars_per_day <- food_grps_sugars_per_day %>% 
 #   inner_join(select(nhanes, SEQN), by = "SEQN")
 
+# Extract site level periodontal measurements for just those in the cohort
+perio_cal_site <- perio_raw %>% 
+  select(SEQN, matches("^[0-9]{2}LA")) %>% 
+  gather(variable, value, -SEQN) %>% 
+  mutate(tooth = str_extract(variable, "^[0-9]{2}"),
+         site = str_extract(variable, "[A-Z]{3}$")) %>% 
+  inner_join(select(nhanes, SEQN, RIDAGEYR), by = "SEQN") %>% 
+  filter(!is.na(value))
+
+perio_pocket_site <- perio_raw %>% 
+  select(SEQN, matches("^[0-9]{2}PC")) %>% 
+  gather(variable, value, -SEQN) %>% 
+  mutate(tooth = str_extract(variable, "^[0-9]{2}"),
+         site = str_extract(variable, "[A-Z]{3}$")) %>% 
+  inner_join(select(nhanes, SEQN, RIDAGEYR), by = "SEQN") %>% 
+  filter(!is.na(value))
+
 cat("\n Cohort prepared")
 
 # Comparison of total food weight and total energy intake 
@@ -134,16 +151,19 @@ food_groups_nhanes <- food_grps_grms_per_day %>%
 # List of groups of beverages included
 bevs_included <- names(select(food_groups_nhanes, matches("BEV|WATER")))
 
-# Scale by overall energy intake
+# Scale by overall energy intake (the nutrient density method)
 food_groups_scl <- food_groups_nhanes %>% 
   mutate_at(vars(-SEQN), ~./nhanes$KCAL) %>% 
-  # Alternative scaling by total quantity consumed
-  #mutate_at(vars(-SEQN), ~./food_total_grms_per_day$GRMS) %>% 
-  
   select(-SEQN) %>%
   scale()
 
 food_groups_cor <- cor(food_groups_scl)
+
+# Scale by overall energy intake (the residual method)
+food_groups_cor_resid <- food_groups_nhanes %>% 
+  select(-SEQN) %>% 
+  modify(~resid(lm(.~ nhanes$KCAL, data = food_groups_nhanes))) %>% cor()
+#food_groups_cor <- food_groups_cor_resid
 
 
 cat("\n Food groups prepared")

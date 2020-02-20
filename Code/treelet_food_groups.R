@@ -2,6 +2,9 @@
 library(tidyverse)
 library(treelet) # For treelet transform
 library(ggdendro)
+library(here)
+
+source(here("Code", "treelet_functions.R"))
 
 cat("\n Treelet analysis on food groups\n")
 
@@ -52,6 +55,7 @@ nh_grps <- bind_cols(nhanes, as_tibble(food_groups_tc_scores)) %>%
   
   # Standardise age and KCAL to make predictions easier
   mutate(RIDAGEYR = as.numeric(scale(RIDAGEYR)),
+         KCAL_raw = KCAL,
          KCAL = as.numeric(scale(KCAL))) %>% 
   
   # Set up outcome variable for Beta regression

@@ -18,7 +18,7 @@ R checkpoint **`r checkpoint_date`**
 The previous chapter detailed treelet transformation of NHANES dietary data and associations with periodontal outcomes. Whilst many of the nutrient groupings identified by the TCs were sensible, it was not possible to determine which types of *diet* provided these nutrients. This chapter focuses on associations between diet (rather than nutrient intake) and periodontal disease in an effort to extract real-world dietary patterns that could form the basis for diet recommendations to improve periodontal outcomes.
 
 ## Dietary data
-Data were drawn from NHANES waves F to H (2009/10 to 2013/14) and the same process of exclusions used to generate the analysis cohort. The NHANES dietary data contains files detailing the individual foods and drinks consumed during the two 24 hour survey periods for each individual. The number of different food items consumed across the cohort is very large and contains many items consumed by very few people, thus providing little information on which to base inference. Therefore, food items were classified into food groups defined in the USDA Food and Nutrient Database for Dietary Studies, version 5 [@ahuja_usda_2012]. When a food group was consumed in both 24 hour periods, the average intake value was used. When a group was only consumed in a single period, this value was used (where the food group was not consumed in either period, the value of zero was used).
+Data were drawn from NHANES waves F to H (2009/10 to 2013/14) and the same process of exclusions used to generate the analysis cohort. The NHANES dietary data contains files detailing the individual foods and drinks consumed during the two 24 hour survey periods for each individual. The number of different food items consumed across the cohort is very large and contains many items consumed by very few people, thus providing little information on which to base inference. Therefore, food items were classified into food groups defined in the USDA Food and Nutrient Database for Dietary Studies, version 5 [@ahuja_usda_2012]. When a food group was consumed in both 24 hour periods, the average intake value was used (where the food group was not consumed in either period, the value of zero was used). When only one 24-hour recall was conducted the intake value during this period was used.
 
 ```{r prepare-modelling-dataset, include=FALSE}
 source(here("Code", "diet_periodontal.R"))
@@ -470,7 +470,7 @@ nh_grps %>% select(SEQN, TC7_dec) %>%
   # Select only nutrients with strong correlations 
   inner_join(cor_tc7 %>% 
             enframe(name = "Nutrient", value = "r") %>% 
-  filter(abs(r)>0.1)
+  filter(abs(r)>0.15)
   , by = "Nutrient") %>%
   arrange(r) %>% 
   mutate(Nutrient = as_factor(Nutrient)) %>% 

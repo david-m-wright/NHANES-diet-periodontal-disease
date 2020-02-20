@@ -301,15 +301,27 @@ ExtractTCIntake <- function(daily_intake, TC, decile_column){
 
 
 # Select variables correlated with TC1
+# Kendall's tau because skewed TC1 score
 cor_tc1 <- nh_grps %>% 
   select(one_of(pull(diet_names, `Variable Name`))) %>% 
   map_dbl(~round(cor(nh_grps$TC1, ., method = "kendall"), 3)) 
+
+cor_tc1_pearson <- nh_grps %>% 
+  select(one_of(pull(diet_names, `Variable Name`))) %>% 
+  map_dbl(~round(cor(nh_grps$TC1, ., method = "pearson"), 3)) 
 
 
 # Select variables correlated with TC7
 cor_tc7 <- nh_grps %>% 
   select(one_of(pull(diet_names, `Variable Name`))) %>% 
   map_dbl(~round(cor(nh_grps$TC7, ., method = "kendall"), 3))
+
+cor_tc7_pearson <- nh_grps %>% 
+  select(one_of(pull(diet_names, `Variable Name`))) %>% 
+  map_dbl(~round(cor(nh_grps$TC7, ., method = "pearson"), 3)) 
+
+ggplot(nh_grps, aes(x = THEO, y = TC1)) + geom_density2d()
+
 
 # Intake of carbohydrates from food and drink by TC7
 food_drink_intake <- nh_grps %>% 
@@ -343,7 +355,51 @@ rob2_coef <- bind_cols(Term = colnames(rob2_matrix),
   mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
   rename(Sig = V1)
 
+
+# Median predictions for TC1 from robust regression
+TC1_medians_rob2 <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob2$fitted.values)) %>% 
+  group_by(TC_decile = TC1_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted median: robust regression (decile)" = median(predicted_robust)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+TC7_medians_rob2 <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob2$fitted.values)) %>% 
+  group_by(TC_decile = TC7_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted median: robust regression (decile)" = median(predicted_robust)) %>% 
+  gather(Measurement, value, -TC_decile)
+
 cat("\n Treelet analysis on food groups completed")
+
+
+# Calculate other periodontal measures by TC1 and TC7 deciles #
+
+TC1_perio <- nh_grps %>% 
+  group_by(TC1_dec) %>% 
+  summarise(CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>% 
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  transmute(Variable = paste("TC1 Decile", TC1_dec),
+        `Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+         `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")"))
+
+TC7_perio <- nh_grps %>% 
+  group_by(TC7_dec) %>% 
+  summarise(CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>% 
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  transmute(Variable = paste("TC7 Decile", TC7_dec),
+            `Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+            `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")"))
+
 
 
 # Robust regression excluding those with low tooth count
@@ -356,6 +412,20 @@ rob3 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm[nh_grps$tooth_count>=20],
 # Extract coefficients for median model
 rob3_coef <- bind_cols(Term = colnames(model.matrix(rob_mod, data = nh_grps[nh_grps$tooth_count>=20,])),
                        as_tibble(rob3$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+
+## Robust regression adding total energy intake ##
+# Multivariate nutrient density model from Willett et al., 1997.
+
+rob4 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                x = model.matrix(update(rob_mod, ~.+KCAL_raw), data = nh_grps),
+                p = 0.5)
+
+rob4_coef <- bind_cols(Term = colnames(model.matrix(update(rob_mod, ~.+KCAL_raw), data = nh_grps)),
+                       as_tibble(rob4$table, .name_repair = "minimal")) %>% 
   mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
   rename(Sig = V1)
 

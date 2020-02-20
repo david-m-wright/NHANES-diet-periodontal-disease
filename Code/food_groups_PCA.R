@@ -7,9 +7,46 @@ library(lqr) # For logistic quantile regression
 # Note that because the PCA is on the scaled food group dataset this is equivalent to using the correlation matrix
 pca_food_groups <- prcomp(food_groups_scl, center = FALSE, scale. = FALSE)
 
-# Reverse the signs on the eigenvectors (loadings) and scores so PC loadings are directly comparable with TC loadings
+# Reverse the signs on the eigenvectors and scores so PC loadings are directly comparable with TC loadings
 pca_food_groups$rotation <- -pca_food_groups$rotation
 pca_food_groups$x <- -pca_food_groups$x
+
+# Calculate the factor loadings
+# These are the eigenvectors (unit scaled) multiplied by the square root of 
+# the corresponding eigenvalue.
+# True factor loadings give the correlation between the PC scores and the original
+# (in this case already scaled by energy intake and then standardised) variable.
+# Many 'loadings' reported in the literature are probably eigenvectors as R princomp() reports
+# them as loadings.
+# Illustrate calculation
+food_groups_scl %>% 
+  as_tibble() %>% 
+  map_dbl(., ~cor(., pca_food_groups$x[,1]))
+sweep(pca_food_groups$rotation, 2, pca_food_groups$sdev, FUN = "*")[, "PC1"]
+
+
+# # An alternative approach is to use the FactoMineR
+# library(FactoMineR)
+# # The PCA and dimdesc functions in FactoMineR are able to reproduce these figures
+# pca_food_groups2 <- PCA(food_groups_scl, scale.unit = FALSE)
+# # Variable loadings
+# pca_food_groups2$var$cor
+# dimdesc(pca_food_groups2, 1)$Dim.1
+# # As this was done on a scaled dataset, variable coordinates and correlations are the same 
+# plot(pca_food_groups2$var$coord, pca_food_groups2$var$cor)
+# abline(0,1)
+
+
+# Extract loadings for PCs
+food_groups_pc_loadings <- sweep(pca_food_groups$rotation, 2, pca_food_groups$sdev, FUN = "*") %>% 
+  as.data.frame() %>% 
+  as_tibble(rownames="Variable") %>% 
+  rename_all(~str_replace(., "Comp.([0-9]{1,2})", "PC\\1")) %>% 
+  select(Variable, PC1:PC8) %>% 
+  gather(Component, Value, -Variable) %>% 
+  # Order by leaf labelling order
+  mutate(Variable = factor(Variable, levels = food_groups_dendro_order))
+
 
 
 
@@ -32,18 +69,6 @@ nh_grps_pca <- bind_cols(nhanes, food_groups_pc_scores) %>%
   # Standardise age and KCAL to make predictions easier
   mutate(RIDAGEYR = as.numeric(scale(RIDAGEYR)),
          KCAL = as.numeric(scale(KCAL)))
-
-
-# Extract loadings for PCs
-food_groups_pc_loadings <- pca_food_groups$rotation %>% 
-  as.data.frame() %>% 
-  as_tibble(rownames="Variable") %>% 
-  rename_all(~str_replace(., "Comp.([0-9]{1,2})", "PC\\1")) %>% 
-  select(Variable, PC1:PC8) %>% 
-  gather(Component, Value, -Variable) %>% 
-  # Order by leaf labelling order
-  mutate(Variable = factor(Variable, levels = food_groups_dendro_order))
-
 
 
 
@@ -130,4 +155,43 @@ PC8_medians <- nh_grps_pca %>%
             "Predicted 75th percentile" = median(predicted_upper)) %>% 
   gather(Measurement, value, -PC_decile)
 
+
+
+# Calculate other periodontal measures by PC deciles #
+
+PC1_perio <- nh_grps_pca %>% 
+  group_by(PC1_dec) %>% 
+  summarise(CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>% 
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  transmute(Variable = paste("PC1 Decile", PC1_dec),
+            `Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+            `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")"))
+
+PC6_perio <- nh_grps_pca %>% 
+  group_by(PC6_dec) %>% 
+  summarise(CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>% 
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  transmute(Variable = paste("PC6 Decile", PC6_dec),
+            `Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+            `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")"))
+
+PC8_perio <- nh_grps_pca %>% 
+  group_by(PC8_dec) %>% 
+  summarise(CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>% 
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  transmute(Variable = paste("PC8 Decile", PC8_dec),
+            `Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+            `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")"))
 

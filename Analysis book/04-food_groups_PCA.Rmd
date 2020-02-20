@@ -114,10 +114,15 @@ rob1_coef_pca %>%
                mutate(Variable = paste(PC, "Decile", PC_decile),
                         `Median sites with CAL` = percent(value, accuracy = 0.1))
                     , by = "Variable") %>%
+  
+  # Add other periodontal measures
+  left_join(bind_rows(PC1_perio, PC6_perio, PC8_perio), by = "Variable") %>% 
+  
   mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>%
   mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>%
   arrange(PC, PC_decile) %>%
-  select(Variable, `Odds Ratio`, P, `Median sites with CAL`) %>%
+  select(Variable, `Odds Ratio`, P, 
+         `Median sites with CAL`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>%
 kable(caption = "Association between dietary Principal Component scores, adjustment variables and extent of clinical attachment loss.", digits = 2)
 ```
 
@@ -130,7 +135,7 @@ PC8 characterised high intake of coffee, tea, sugar, yogurt, crackers, milk dess
 PC6 and PC8 are more difficult to relate to TCs. Elements of TC7 can be obseved for low calorie carbonated soft drinks and crackers, pretzels etc. 
 
 
-```{r PC-loading-plots-filtered, fig.height=11, fig.width=7}
+```{r PC-loading-plots-filtered, fig.height=11, fig.width=7, fig.asp=0.8}
 food_groups_pc_loadings %>% 
   filter(abs(Value) > 0.1) %>% 
 ggplot(aes(x = Variable, y = Value)) +
@@ -140,5 +145,6 @@ ggplot(aes(x = Variable, y = Value)) +
   scale_y_continuous(breaks = c(0, 0.5)) +
   coord_flip() + 
   theme_light() +
-  ggtitle("PC loading plot for analysis of food group intake with small loadings removed (|values|<0.1)")
+  labs(x = "Food group", y = "Component loading") +
+  ggsave(here("Papers", "revision", "sup_fig1.png"))
 ```
