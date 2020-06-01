@@ -1,0 +1,236 @@
+# Revised figures and tables for publication {#revised}
+
+```{r setup, include = FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
+library(here)
+library(checkpoint)
+checkpoint_date <- "2020-04-01"
+checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
+library(tidyverse)
+```
+
+Chapter compiled **`r Sys.Date()`**   
+
+R checkpoint **`r checkpoint_date`**   
+
+This chapter comprises additional analyses following the third round of reviewing at the _American Journal for Clinical Nutrition_. Reformatted figures and tables are also provided.
+
+```{r prepare-modelling-dataset, include=FALSE}
+source(here("Code", "diet_periodontal.R"))
+source(here("Code", "helper_functions.R"))
+```
+
+```{r run-analyses, include=FALSE}
+source(here("Code", "treelet_food_groups.R"))
+source(here("Code", "food_groups.R"))
+source(here("Code", "food_groups_PCA.R"))
+```
+
+## Sensitivity analysis - smoking status
+
+The editors queried whether there might be residual confounding associated with smoking status and suggested that current smokers be excluded and the analyses rerun. 
+
+Excluding smokers from the CAL ~ TC robust quantile regression model (but not from the original generation of TCs) indicated that the gradient of CAL extent with TC1 was substantially reduced but the gradient with TC7 was largely unchanged. This is is unsurprising given the gradients in prevalence of "ever smoked" by TC1 and TC7 in the [cohort characteristcs](#cohort-characteristics) section.
+
+
+```{r selected-robust-coefficients-excluding-current-smokers}
+rob6_coef %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "SMQ020" ~ "Never smoked",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+  filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+  
+  # Add the predicted CAL medians
+  full_join(TC1_medians_rob6 %>% 
+              mutate(TC = "TC1") %>% 
+              rbind(TC7_medians_rob6 %>% 
+                      mutate(TC = "TC7")) %>% 
+              filter(str_detect(Measurement, "robust")) %>% 
+              mutate(Variable = paste(TC, "Decile", TC_decile),
+                        `Median sites with CAL` = perc(value))
+                    , by = "Variable") %>% 
+  
+  # Add other periodontal measures
+  left_join(bind_rows(TC1_perio, TC7_perio), by = "Variable") %>% 
+  
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  arrange(TC, TC_decile) %>% 
+  select(Variable, `Odds Ratio`, P, 
+         `Median sites with CAL`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>%   
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss. Model fitted excluding current smokers.")
+
+```
+
+Given the large number of current smokers in the dataset and the space required to interpret two different sets of model estimates a more elegant approach is to replace the two category (ever/never) smoking status variable (`SMQ020`) with a three category variable (never/former/ever) derived from `SMQ020` and `SMQ040`. 
+
+```{r smoking-status}
+tabyl(nh_grps,smoking) %>%
+  adorn_pct_formatting() %>% 
+  kable(caption = "Distribution of smoking status in NHANES dataset.")
+
+```
+
+The estimated associations between TC1 and TC7 using this approach were very similar to those in the [original submission](#paper) and so this results were amended accordingly.
+
+```{r selected-robust-coefficients-three-category-smoking}
+rob5_coef %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "smokingFormer" ~ "Former smoker",
+                              Term == "smokingCurrent" ~ "Current smoker",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+  filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+  
+  # Add the predicted CAL medians
+  full_join(TC1_medians_rob5 %>% 
+              mutate(TC = "TC1") %>% 
+              rbind(TC7_medians_rob5 %>% 
+                      mutate(TC = "TC7")) %>% 
+              filter(str_detect(Measurement, "robust")) %>% 
+              mutate(Variable = paste(TC, "Decile", TC_decile),
+                        `Median sites with CAL` = perc(value))
+                    , by = "Variable") %>% 
+  
+  # Add other periodontal measures
+  left_join(bind_rows(TC1_perio, TC7_perio), by = "Variable") %>% 
+  
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  arrange(TC, TC_decile) %>% 
+  select(Variable, `Odds Ratio`, P, 
+         `Median sites with CAL`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>%   
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss. Model fitted with three category classification of smoking status.")
+
+```
+
+
+## Figures for text
+
+
+Predicted CAL extent for male, non-smoker, non-diabetic in decile 5 for each TC, aged 46: `r round(rob5_age46, 1)`   
+Predicted CAL extent for male, non-smoker, non-diabetic in decile 5 for each TC, aged 61: `r round(rob5_age61, 1)`  
+
+
+Proportion of variance explained by the TCs one to eight: `r round(as.numeric(select(filter(food_groups_tc_reduced$tcv, Component == 8), Cumulative))*100)`
+
+AIC of robust logistic quantile regression of median CAL proportion with three category smoking status and TCs categorised into deciles: `r round(rob5$AIC)`
+AIC of robust logistic quantile regression of median CAL proportion with three category smoking status and straight line relationships only with TCs: `r round(rob8$AIC)`
+
+```{r food-drink-model}
+rob7_coef %>% 
+  mutate(Variable = case_when(Term == "RIDAGEYR" ~ "Age",
+                              Term == "RIAGENDR" ~ "Female",
+                              Term == "smokingFormer" ~ "Former smoker",
+                              Term == "smokingCurrent" ~ "Current smoker",
+                              Term == "diabetesTRUE" ~ "Diabetes",
+                              Term == "Intake_Carbs_Drink" ~ "Carbohydrate intake - drinks",
+                              Term == "Intake_Carbs_Food" ~ "Carbohydrate intake - food",
+                              str_detect(Term, "(TC1|TC7)_dec") ~ str_replace(Term, "_dec", " Decile "))) %>% 
+   filter(!is.na(Variable)) %>% 
+  transmute(Variable,         
+            `Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+            P = paste(format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001), Sig)) %>% 
+  
+  # Add the predicted CAL medians
+  full_join(TC1_medians_rob7 %>% 
+              mutate(TC = "TC1") %>% 
+              rbind(TC7_medians_rob7 %>% 
+                      mutate(TC = "TC7")) %>% 
+              filter(str_detect(Measurement, "robust")) %>% 
+              mutate(Variable = paste(TC, "Decile", TC_decile),
+                        `Median sites with CAL` = perc(value))
+                    , by = "Variable") %>% 
+  
+  
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  arrange(TC, TC_decile) %>% 
+  select(Variable, `Odds Ratio`, P, 
+         `Median sites with CAL`) %>% 
+kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss, adjusting for carboyhdrate intake from food and drinks.")
+```
+
+## Tables
+
+```{r descriptive-stats-by-CAL-quartile}
+bind_rows(
+nhanes %>% 
+  rename(`Mean Age (SD)` = RIDAGEYR) %>% 
+  SummariseContinuousTwoway(vars(`Mean Age (SD)`), CAL_sites_quartile),
+nhanes %>%
+  mutate(Sex = factor(if_else(RIAGENDR == 1, "Male", "Female"), levels = c("Male", "Female")),
+         Diabetes = factor(if_else(diabetes, "Diabetes", "No diabetes"), levels = c("No diabetes", "Diabetes")),
+         Smoking = factor(case_when(smoking == "Never" ~ "Never smoked",
+                             smoking == "Former" ~ "Former smoker",
+                             smoking == "Current" ~ "Current smoker"), 
+                          levels = c("Never smoked", "Former smoker", "Current smoker")))  %>% 
+  SummariseDiscreteTwoway(vars(Sex, Diabetes, Smoking), CAL_sites_quartile)
+) %>% 
+  mutate(Level = coalesce(Level, Variable)) %>% 
+  select(Level, one_of(as.character(1:4))) %>% 
+  kable(caption = "Cohort characteristics by quartile of CAL extent.")
+
+```
+
+
+```{r robust-coefficients}
+rob5_summary %>% 
+  filter(str_detect(Metric, "Mean", negate = T)) %>% 
+  kable(caption = "Association between dietary Treelet Component scores and extent of clinical attachment loss (CAL).") #%>% 
+  # scroll_box()
+```
+
+```{r perio-by-TC}
+rob5_summary %>% 
+  filter(str_detect(Metric, "Mean")) %>% 
+  kable(caption = "Periodontal measures by dietary Treelet Component scores.")
+```
+
+```{r linear-trends-by-TC}
+rob8_coef %>% 
+  mutate(P = format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001)) %>% 
+  filter(str_detect(Term, "TC")) %>% 
+  select(Term, Estimate, P, OR) %>% 
+  kable(caption = "Estimated linear associations between TCs (continuous) and extent of clinical attachment loss (CAL).", digits = 3)
+
+```
+
+## Supplementary tables
+
+```{r robust-coefficients-PCA}
+rob5_summary_pca %>% 
+  filter(str_detect(Metric, "Mean", negate = T)) %>% 
+  kable(caption = "Association between dietary Principal Component scores and extent of clinical attachment loss (CAL).")
+```
+
+```{r perio-by-TC-PCA}
+rob5_summary_pca %>% 
+  filter(str_detect(Metric, "Mean")) %>% 
+  kable(caption = "Periodontal measures by dietary Treelet Component scores.")
+```
+
+
+## Figures
+
+```{r treelet-loading-plots, fig.height=11, fig.width=8}
+ggplot(food_groups_loadings, aes(x = grp_description, y = Value)) +
+  facet_wrap(~Component, nrow = 1) +
+  geom_bar(stat = "identity") + 
+  scale_y_continuous(breaks = c(0, 0.5)) +
+  labs(y = "Component loading", x = "Food Group") +
+  coord_flip() + 
+  theme_light() +
+   ggsave(here("Papers", "revision3", "fig3.tiff"), device = "tiff", dpi = "print", width = 8, height = 11, units = "in", compression = "lzw", type = "cairo")
+
+```

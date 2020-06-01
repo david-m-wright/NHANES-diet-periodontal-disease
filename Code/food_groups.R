@@ -430,6 +430,284 @@ rob4_coef <- bind_cols(Term = colnames(model.matrix(update(rob_mod, ~.+KCAL_raw)
   rename(Sig = V1)
 
 
+
+## Robust regression with three category smoking status ##
+
+rob5 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                x = model.matrix(update(rob_mod, ~.-SMQ020 + smoking), data = nh_grps),
+                p = 0.5)
+
+rob5_lower = Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                     x = model.matrix(update(rob_mod, ~.-SMQ020 + smoking), data = nh_grps),
+                     p = 0.25)
+
+rob5_upper = Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                     x = model.matrix(update(rob_mod, ~.-SMQ020 + smoking), data = nh_grps),
+                     p = 0.75)
+
+rob5_coef <- bind_cols(Term = colnames(model.matrix(update(rob_mod, ~.-SMQ020 + smoking), data = nh_grps)),
+                       as_tibble(rob5$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+# Median predictions for TC1 and TC7 from robust regression
+
+TC1_medians_rob5 <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob5$fitted.values),
+        predicted_upper = invlogit(rob5_upper$fitted.values),
+        predicted_lower = invlogit(rob5_lower$fitted.values)) %>% 
+  group_by(TC_decile = TC1_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted 25th percentile" = median(predicted_lower),
+            "Predicted median: robust regression (decile)" = median(predicted_robust),
+            "Predicted 75th percentile" = median(predicted_upper)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+TC7_medians_rob5 <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob5$fitted.values),
+        predicted_upper = invlogit(rob5_upper$fitted.values),
+        predicted_lower = invlogit(rob5_lower$fitted.values)) %>% 
+  group_by(TC_decile = TC7_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted 25th percentile" = median(predicted_lower),
+            "Predicted median: robust regression (decile)" = median(predicted_robust),
+            "Predicted 75th percentile" = median(predicted_upper)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+
+
+# Format all the TC estimates 
+rob5_summary <- nh_grps %>% 
+  select(SEQN, matches("^TC[0-9]{1}_dec"),
+         CAL_mouth_mean, PD_mouth_mean) %>% 
+  cbind(predicted_robust = invlogit(rob5$fitted.values)) %>% 
+  pivot_longer(cols = matches("^TC[0-9]{1}_dec"), 
+               names_to = "TC", 
+               values_to = "TC_decile") %>% 
+  group_by(TC, TC_decile) %>% 
+  summarise(`Median sites with CAL` = perc(median(predicted_robust)),
+            CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>%
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% 
+  mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  mutate(`Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+         `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")")) %>% 
+  unite(col = Term, TC, TC_decile, sep = "", remove = F) %>% 
+  left_join(rob5_coef %>% 
+  mutate(`Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+         P = format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001)),
+  by = "Term") %>% 
+  ungroup() %>% 
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  mutate(TC = str_extract(TC, "^TC[0-9]{1}")) %>% 
+  
+  select(TC, TC_decile, `Odds Ratio`, P, `Median sites with CAL`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>% 
+  rename(`Median % sites with CAL $\\geq$ 3mm` = `Median sites with CAL`,
+         `Mean CAL (± SE) mm` = `Mean CAL (mm)`,
+         `Mean PPD  (± SE) mm` = `Mean PPD (mm)`) %>% 
+  # rename(`Odds Ratio (median sites with CAL)` = `Odds Ratio`) %>% 
+  pivot_longer(cols = -one_of("TC", "TC_decile"), names_to = "Metric") %>% 
+  pivot_wider(names_from = TC_decile)
+
+
+nh_grps %>% 
+  select(SEQN, matches("^TC[0-9]{1}_dec"),
+         CAL_mouth_mean, PD_mouth_mean) %>% 
+  cbind(predicted_robust = invlogit(rob5$fitted.values)) %>% 
+  pivot_longer(cols = matches("^TC[0-9]{1}_dec"), 
+               names_to = "TC", 
+               values_to = "TC_decile") %>% 
+  group_by(TC, TC_decile) %>% 
+  summarise(median_sites_with_CAL = median(predicted_robust)) %>% 
+  group_by(TC) %>% 
+  summarise(min_sites = min(median_sites_with_CAL),
+            max_sites = max(median_sites_with_CAL),
+            range_sites = max_sites - min_sites)
+  
+# Predictions for various groups
+
+rob5_pred_frame <-  model.matrix(update(rob_mod, ~.-SMQ020 + smoking), data = nh_grps)[1,] %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(RIDAGEYR = 0,
+         RIAGENDR = 1,
+         smokingFormer = 0,
+         smokingCurrent = 0, 
+         diabetesTRUE = 0) %>% 
+  mutate_at(vars(matches("_dec")), function(.){0}) %>% 
+  mutate_at(vars(matches("_dec5")), function(.){1}) 
+
+# Base prediction
+rob5_pred_frame %>% 
+  as.numeric() %*% rob5$beta %>% 
+  invlogit()*100
+
+# Age at given years
+rob5_age46 <- rob5_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 46])) %>% 
+  as.numeric() %*% rob5$beta %>% 
+  invlogit()*100
+
+rob5_age61 <- rob5_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 61])) %>% 
+  as.numeric() %*% rob5$beta %>% 
+  invlogit()*100
+
+
+# Diabetes effect
+rob5_pred_frame %>% 
+  mutate(diabetesTRUE = 1) %>% 
+  as.numeric() %*% rob5$beta %>% 
+  invlogit()*100
+
+# Smoking effect
+rob5_pred_frame %>% 
+  mutate(smokingCurrent = 1) %>% 
+  as.numeric() %*% rob5$beta %>% 
+  invlogit()*100
+
+# Gender effect
+rob5_pred_frame %>% 
+  mutate(RIAGENDR = 2) %>% 
+  as.numeric() %*% rob5$beta %>% 
+  invlogit()*100
+
+
+
+
+
+
+
+
+
+
+## Robust regression excluding current smokers ##
+
+rob6 <- Log.lqr(y = filter(nh_grps, smoking != "Current")$prop_CAL_sites3mm, 
+                x = model.matrix(rob_mod, data = filter(nh_grps, smoking != "Current")),
+                p = 0.5)
+
+# Model the lower quartile
+rob6_lower <- Log.lqr(y = filter(nh_grps, smoking != "Current")$prop_CAL_sites3mm, 
+                      x = model.matrix(rob_mod, data = filter(nh_grps, smoking != "Current")),
+                      p = 0.25) 
+
+# Model the upper quartile
+rob6_upper <- Log.lqr(y = filter(nh_grps, smoking != "Current")$prop_CAL_sites3mm, 
+                      x = model.matrix(rob_mod, data = filter(nh_grps, smoking != "Current")),
+                      p = 0.75) 
+
+# Extract coefficients for median model
+rob6_coef <- bind_cols(Term = colnames(model.matrix(rob_mod, data = filter(nh_grps, smoking != "Current"))),
+                       as_tibble(rob6$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+TC1_medians_rob6 <- filter(nh_grps, smoking != "Current") %>% 
+  cbind(predicted_robust = invlogit(rob6$fitted.values),
+        predicted_upper = invlogit(rob6_upper$fitted.values),
+        predicted_lower = invlogit(rob6_lower$fitted.values)) %>% 
+  group_by(TC_decile = TC1_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted 25th percentile" = median(predicted_lower),
+            "Predicted median: robust regression (decile)" = median(predicted_robust),
+            "Predicted 75th percentile" = median(predicted_upper)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+TC7_medians_rob6 <- filter(nh_grps, smoking != "Current") %>% 
+  cbind(predicted_robust = invlogit(rob6$fitted.values),
+        predicted_upper = invlogit(rob6_upper$fitted.values),
+        predicted_lower = invlogit(rob6_lower$fitted.values)) %>% 
+  group_by(TC_decile = TC7_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted 25th percentile" = median(predicted_lower),
+            "Predicted median: robust regression (decile)" = median(predicted_robust),
+            "Predicted 75th percentile" = median(predicted_upper)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+
+## Robust regression with three category smoking status and food/drink carbohydrate correction ##
+
+rob_mod7 <- update(rob_mod2, ~. -SMQ020 + smoking)
+
+# Setup model matrix
+rob7_matrix <- food_drink_intake %>% 
+  select(SEQN, Intake_Carbs_Drink, Intake_Carbs_Food) %>% 
+  mutate_at(vars(matches("Intake")), scale) %>% 
+  inner_join(nh_grps, by = "SEQN") %>% 
+  model.matrix(rob_mod7, data = .)
+
+# Fit model
+rob7 <- Log.lqr(rob7_matrix, y = nh_grps$prop_CAL_sites3mm, p = 0.5)
+
+# Extract coefficients 
+rob7_coef <- bind_cols(Term = colnames(rob7_matrix),
+                       as_tibble(rob7$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+# Median predictions for TC1 from robust regression
+TC1_medians_rob7 <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob7$fitted.values)) %>% 
+  group_by(TC_decile = TC1_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted median: robust regression (decile)" = median(predicted_robust)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+TC7_medians_rob7 <- nh_grps %>% 
+  cbind(predicted_robust = invlogit(rob7$fitted.values)) %>% 
+  group_by(TC_decile = TC7_dec) %>% 
+  summarise("Actual median" = median(prop_CAL_sites3mm),
+            "Predicted median: robust regression (decile)" = median(predicted_robust)) %>% 
+  gather(Measurement, value, -TC_decile)
+
+
+## Robust regression with three category smoking status and linear functions of TCs ##
+
+rob_mod8 <- ~ 1 + RIDAGEYR + RIAGENDR + 
+  smoking + diabetes + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + 
+  TC7 + TC8
+
+# Model the median
+rob8 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                x = model.matrix(rob_mod8, data = nh_grps),
+                p = 0.5)
+
+rob8_coef <- bind_cols(Term = colnames(model.matrix(rob_mod8, data = nh_grps)),
+                       as_tibble(rob8$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+## Robust regression with three category smoking status and quadratic functions of TCs ##
+
+rob_mod9 <- ~ 1 + RIDAGEYR + RIAGENDR + 
+  smoking + diabetes + TC1 + TC2 + TC3 + TC4 + TC5 + TC6 + 
+  TC7 + TC8 + I(TC1^2) + I(TC2^2) + I(TC3^2) + I(TC4^2) + I(TC5^2) + I(TC6^2) + I(TC7^2) + I(TC8^2)
+
+# Model the median
+rob9 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                x = model.matrix(rob_mod9, data = nh_grps),
+                p = 0.5)
+
+rob9_coef <- bind_cols(Term = colnames(model.matrix(rob_mod9, data = nh_grps)),
+                       as_tibble(rob9$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+# Compare the AIC of the three models with three category smoking status
+rob5$AIC
+rob8$AIC
+rob9$AIC
+
+
 ### Analysis of tooth count ###
 
 
@@ -465,6 +743,4 @@ tooth2_coef <- bind_cols(Term = colnames(model.matrix(rob_mod, data = nh_grps)),
          #"Predicted proportion" = round(invlogit(ifelse(Term == "(Intercept)", Estimate[1], Estimate[1] + Estimate)), 2)
   ) %>% 
   rename(Sig = V1)
-
-
 

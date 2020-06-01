@@ -14,7 +14,12 @@ cat("\n Preparing analysis cohort")
 smoking <- list.files(path = here("NHANES"), pattern = "SMQ", recursive = T, full.names = T) %>% 
   lapply(read_xpt) %>% 
   bind_rows() %>% 
-  select(SEQN, SMQ020)
+  transmute(SEQN, SMQ020, SMQ040,
+            smoking = factor(case_when(SMQ020 %in% c(2, 7, 9) ~ "Never",
+                                SMQ020 == 1 & SMQ040 %in% c(3, 7, 9) ~ "Former",
+                                SMQ020 == 1 & is.na(SMQ040) ~ "Former",
+                                SMQ020 == 1 & SMQ040 %in% c(1,2) ~ "Current"), 
+            levels = c("Never", "Former", "Current")))
 
 ## Demographic data ##
 
@@ -86,7 +91,10 @@ nhanes <- nhanes_all %>%
   filter(dietary == T) %>% 
 
   # Exclude people with no diabetes flag (none)
-  filter(!is.na(diabetes))
+  filter(!is.na(diabetes)) %>% 
+  
+  # Classify into quartiles for descriptive tables
+  mutate(CAL_sites_quartile = ntile(prop_CAL_sites3mm, 4))
 
 # Extract dietary data for just those in the cohort
 dietary <- dietary %>% 
@@ -101,7 +109,7 @@ food_total_grms_per_day <- food_total_grms_per_day %>%
   inner_join(select(nhanes, SEQN), by = "SEQN")
 
 food_grps_per_day <- food_grps_per_day %>% 
-  inner_join(select(nhanes, SEQN), by = "SEQN")
+  inner_join(select(nhanes, SEQN), by = "SEQN") 
 
 # food_grps_carbs_per_day <- food_grps_carbs_per_day %>% 
 #   inner_join(select(nhanes, SEQN), by = "SEQN")

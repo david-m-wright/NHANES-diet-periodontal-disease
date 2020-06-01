@@ -5,7 +5,7 @@ library(knitr)
 knitr::opts_chunk$set(echo = FALSE)
 library(here)
 library(checkpoint)
-checkpoint_date <- "2019-07-31"
+checkpoint_date <- "2020-04-01"
 checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
 library(tidyverse)
 ```
@@ -305,7 +305,7 @@ nh_grps %>%
 
 ```
 
-## Cohort characteristics by treelet component scores   
+## Cohort characteristics by treelet component scores {#cohort-characteristics}  
 We summarised the characteristics of cohort members by deciles of TC1 and TC7 to determine whether these diets are associated with particular demographic groups. 
 
 There was a clear association between the gender and TC1 with males overrepresented in deciles 1 to 5 and females overrepresented in deciles 6 to 10 (almost 70% in decile 10 were female). Likelihood of ever having smoked decreased with increasing TC1 decile. There was no consistent association between diabetes and TC1 and no substantial variation in age among TC1 deciles.

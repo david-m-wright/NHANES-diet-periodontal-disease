@@ -14,7 +14,9 @@ setwd(here("Analysis book"))
 #preview_chapter("02-food_groups.Rmd")
 #preview_chapter("03-figures_for_paper.Rmd")
 #preview_chapter("04-food_groups_PCA.Rmd")
-#preview_chapter("05-references.rmd")
+#preview_chapter("05-figures_for_revised_paper.rmd")
+#preview_chapter("06-references.rmd")
+
 
 # Render the entire book
 bookdown::render_book("index.Rmd", "bookdown::gitbook")

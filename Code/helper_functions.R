@@ -3,9 +3,10 @@
 library(tidyverse)
 library(broom)
 library(scales)
+library(janitor)
 
 # Percentage formatter
-perc <- scales::percent_format()
+perc <- scales::percent_format(accuracy = 0.1)
 
 # Returns the inverse of the logit transformation (from the arm package)
 invlogit <-   function (x) 
@@ -75,3 +76,69 @@ StackQuantiles <- function(mat, fill_val = 0, ...){
 #     filter(Term != "(Intercept)")
 # }
 # 
+
+
+# SD and mean for continous variables
+SummariseSD <- function(x, digits = 1){
+  paste0(round(mean(x, na.rm = T), digits), 
+         " (", 
+         round(sd(x, na.rm = T), digits), 
+         ")")
+}
+
+# Twoway display of continuous variables
+SummariseContinuousTwoway <- function(dat, var1_list, var2){
+  
+  # Select the data to summarise
+  selected_data <- if("quosures" %in% class(var1_list)){
+    {{dat}} %>% 
+      select(!!!var1_list, {{var2}})
+  } else {
+    {{dat}} %>% 
+      select(!!var1_list, {{var2}})
+  }
+  selected_data %>% 
+    group_by({{var2}}) %>% 
+    summarise_at({{var1_list}}, SummariseSD) %>%
+    pivot_longer(-{{var2}}, names_to = "Variable") %>% 
+    pivot_wider(names_from = {{var2}}, values_from = value)
+}
+# SummariseContinousTwoway(study_eye_data, c("Age", "HbA1c"), DM_DR_status)
+
+# Twoway frequency and percentage table for discrete variables
+# Args: dat = data frame from which to tabulate variables
+# var1_list = character vector or vars() specification listing variables to tabulate (rows)
+# var2 = unquoted name of variable to tabulate by (columns)
+SummariseDiscreteTwoway <- function(dat, var1_list, var2){
+  
+  # Generate the base frequency tables, one for each variable in the var1_list
+  # Tabulates frequencies of var1 by var2
+  cross_tabs <- if("quosures" %in% class(var1_list)){
+    {{var1_list}}
+  } else {
+    var1_list %>% 
+      syms() 
+  }
+  
+  map_dfr(cross_tabs, ~tabyl(dat = {{dat}}, var1 = !!.,  var2 = {{var2}}) %>% 
+            
+            # Format percentages
+            adorn_totals() %>%
+            adorn_percentages(denominator = "col") %>%
+            adorn_pct_formatting(digits = 1, affix_sign = FALSE) %>%
+            adorn_ns(position = "front") %>%
+            
+            # Add columns for variable and level names
+            mutate(Variable = names(.)[1]) %>% 
+            rename(Level = names(.)[1])) %>%
+    
+    # Drop the excess totals rows
+    mutate(row_number = row_number()) %>% 
+    filter(is.na(Level) | !(Level == "Total" & row_number != max(row_number))) %>% 
+    mutate(Variable = if_else(row_number == max(row_number), "Total", Variable),
+           Level = if_else(row_number == max(row_number), "-", Level)) %>% 
+    select(-row_number) %>% 
+    select(Variable, Level, everything())
+  
+}
+#SummariseDiscreteTwoway(choroid_eyes, vars(Sex, Study_eye), DM_DR_status)

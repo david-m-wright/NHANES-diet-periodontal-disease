@@ -59,14 +59,31 @@ nh_grps <- bind_cols(nhanes, as_tibble(food_groups_tc_scores)) %>%
          KCAL = as.numeric(scale(KCAL))) %>% 
   
   # Set up outcome variable for Beta regression
-  mutate(prop_CAL_sites3mm_beta = PropTransform(prop_CAL_sites3mm))
+  mutate(prop_CAL_sites3mm_beta = PropTransform(prop_CAL_sites3mm)) 
 
 #food_groups_out <- bind_cols(diet, data.frame(food_groups_tc_scores))
+
+WrapLabel <- function(x){
+  xwrap <- str_wrap(x, width = 30)
+  # str_pad(
+  if_else(str_detect(xwrap, "\n"), 
+          as.character(xwrap), 
+          paste0("\n", as.character(xwrap))) %>% 
+    as_factor()
+  # width = 30, side = "right")
+}
 
 # Extract loadings for TCs
 food_groups_loadings <- food_groups_tc_reduced$tc %>% 
   as_tibble(rownames = "Variable") %>% 
   gather(Component, Value, -Variable) %>% 
+  # Add food group descriptions
+  inner_join(fgrp %>% 
+               distinct(grp_code, grp_description),
+             by = c("Variable" = "grp_code")) %>% 
   # Order by leaf labelling order
-  mutate(Variable = factor(Variable, levels = food_groups_dendro_order))
+  mutate(Variable = factor(Variable, levels = food_groups_dendro_order)) %>% 
+    arrange(Variable) %>% 
+    mutate(grp_description = as_factor(grp_description),
+           grp_padded = WrapLabel(grp_description)) 
 
