@@ -529,61 +529,6 @@ nh_grps %>%
             max_sites = max(median_sites_with_CAL),
             range_sites = max_sites - min_sites)
   
-# Predictions for various groups
-
-rob5_pred_frame <-  model.matrix(update(rob_mod, ~.-SMQ020 + smoking), data = nh_grps)[1,] %>% 
-  t() %>% 
-  as.data.frame() %>% 
-  mutate(RIDAGEYR = 0,
-         RIAGENDR = 1,
-         smokingFormer = 0,
-         smokingCurrent = 0, 
-         diabetesTRUE = 0) %>% 
-  mutate_at(vars(matches("_dec")), function(.){0}) %>% 
-  mutate_at(vars(matches("_dec5")), function(.){1}) 
-
-# Base prediction
-rob5_pred_frame %>% 
-  as.numeric() %*% rob5$beta %>% 
-  invlogit()*100
-
-# Age at given years
-rob5_age46 <- rob5_pred_frame %>% 
-  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 46])) %>% 
-  as.numeric() %*% rob5$beta %>% 
-  invlogit()*100
-
-rob5_age61 <- rob5_pred_frame %>% 
-  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 61])) %>% 
-  as.numeric() %*% rob5$beta %>% 
-  invlogit()*100
-
-
-# Diabetes effect
-rob5_pred_frame %>% 
-  mutate(diabetesTRUE = 1) %>% 
-  as.numeric() %*% rob5$beta %>% 
-  invlogit()*100
-
-# Smoking effect
-rob5_pred_frame %>% 
-  mutate(smokingCurrent = 1) %>% 
-  as.numeric() %*% rob5$beta %>% 
-  invlogit()*100
-
-# Gender effect
-rob5_pred_frame %>% 
-  mutate(RIAGENDR = 2) %>% 
-  as.numeric() %*% rob5$beta %>% 
-  invlogit()*100
-
-
-
-
-
-
-
-
 
 
 ## Robust regression excluding current smokers ##
@@ -702,10 +647,143 @@ rob9_coef <- bind_cols(Term = colnames(model.matrix(rob_mod9, data = nh_grps)),
   rename(Sig = V1)
 
 
-# Compare the AIC of the three models with three category smoking status
-rob5$AIC
-rob8$AIC
-rob9$AIC
+
+
+### Robust regression with three category smoking status, ethnicity and educational attainment ###
+
+rob10 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                x = model.matrix(update(rob_mod, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2), data = nh_grps),
+                p = 0.5)
+
+rob10_lower = Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                     x = model.matrix(update(rob_mod, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2), data = nh_grps),
+                     p = 0.25)
+
+rob10_upper = Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                     x = model.matrix(update(rob_mod, ~.-SMQ020 + smoking+ RIDRETH1 + DMDEDUC2), data = nh_grps),
+                     p = 0.75)
+
+
+rob10_coef <- bind_cols(Term = colnames(model.matrix(update(rob_mod, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2), data = nh_grps)),
+                       as_tibble(rob10$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+# Format all the TC estimates 
+rob10_summary <- nh_grps %>% 
+  select(SEQN, matches("^TC[0-9]{1}_dec"),
+         CAL_mouth_mean, PD_mouth_mean) %>% 
+  cbind(predicted_robust = invlogit(rob10$fitted.values)) %>% 
+  pivot_longer(cols = matches("^TC[0-9]{1}_dec"), 
+               names_to = "TC", 
+               values_to = "TC_decile") %>% 
+  group_by(TC, TC_decile) %>% 
+  summarise(`Median sites with CAL` = perc(median(predicted_robust)),
+            CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>%
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% 
+  mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  mutate(`Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+         `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")")) %>% 
+  unite(col = Term, TC, TC_decile, sep = "", remove = F) %>% 
+  left_join(rob10_coef %>% 
+              mutate(`Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+                     P = format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001)),
+            by = "Term") %>% 
+  ungroup() %>% 
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  mutate(TC = str_extract(TC, "^TC[0-9]{1}")) %>% 
+  
+  select(TC, TC_decile, `Odds Ratio`, P, `Median sites with CAL`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>% 
+  rename(`Median % sites with CAL $\\geq$ 3mm` = `Median sites with CAL`,
+         `Mean CAL (± SE) mm` = `Mean CAL (mm)`,
+         `Mean PPD  (± SE) mm` = `Mean PPD (mm)`) %>% 
+  # rename(`Odds Ratio (median sites with CAL)` = `Odds Ratio`) %>% 
+  pivot_longer(cols = -one_of("TC", "TC_decile"), names_to = "Metric") %>% 
+  pivot_wider(names_from = TC_decile)
+
+
+
+# Predictions for various groups
+
+rob10_pred_frame <-  model.matrix(update(rob_mod, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2), data = nh_grps)[1,] %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(RIDAGEYR = 0,
+         RIAGENDR = 1,
+         smokingFormer = 0,
+         smokingCurrent = 0, 
+         diabetesTRUE = 0,
+         RIDRETH12 = 0,
+         RIDRETH13 = 1,# White
+         RIDRETH14 = 0,
+         RIDRETH15 = 0,
+         DMDEDUC22 = 0,
+         DMDEDUC23 = 1,# High school graduate
+         DMDEDUC24 = 0,
+         DMDEDUC25 = 0,
+         `DMDEDUC2(Missing)` = 0) %>% 
+  mutate_at(vars(matches("_dec")), function(.){0}) %>% 
+  mutate_at(vars(matches("_dec5")), function(.){1}) 
+
+# Age at given years
+ rob10_age48 <- 
+  rob10_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 48])) %>% 
+  as.numeric() %*% rob10$beta %>% 
+  invlogit()*100
+
+rob10_age62 <- rob10_pred_frame %>% 
+  mutate(RIDAGEYR = unique(nh_grps$RIDAGEYR[nhanes$RIDAGEYR == 62])) %>% 
+  as.numeric() %*% rob10$beta %>% 
+  invlogit()*100
+
+# Base prediction
+rob10_pred_frame %>% 
+  as.numeric() %*% rob10$beta %>% 
+  invlogit()*100
+
+# Diabetes effect
+rob10_pred_frame %>% 
+  mutate(diabetesTRUE = 1) %>% 
+  as.numeric() %*% rob10$beta %>% 
+  invlogit()*100
+
+# Smoking effect
+rob10_pred_frame %>% 
+  mutate(smokingCurrent = 1) %>% 
+  as.numeric() %*% rob10$beta %>% 
+  invlogit()*100
+
+# Gender effect
+rob10_pred_frame %>% 
+  mutate(RIAGENDR = 2) %>% 
+  as.numeric() %*% rob10$beta %>% 
+  invlogit()*100
+
+
+
+
+
+### Robust regression with three category smoking status, ethnicity and educational attainment and linear function of TCs ###
+
+rob_mod11 <- update(rob_mod8, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2)
+
+rob11 <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                 x = model.matrix(rob_mod11, data = nh_grps),
+                 p = 0.5)
+
+rob11_coef <- bind_cols(Term = colnames(model.matrix(rob_mod11, data = nh_grps)),
+                       as_tibble(rob11$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
 
 
 ### Analysis of tooth count ###

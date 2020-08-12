@@ -15,7 +15,8 @@ setwd(here("Analysis book"))
 #preview_chapter("03-figures_for_paper.Rmd")
 #preview_chapter("04-food_groups_PCA.Rmd")
 #preview_chapter("05-figures_for_revised_paper.rmd")
-#preview_chapter("06-references.rmd")
+#preview_chapter("06-socio_economic_status.rmd")
+#preview_chapter("07-references.rmd")
 
 
 # Render the entire book

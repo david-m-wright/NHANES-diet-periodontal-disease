@@ -61,6 +61,8 @@ nh_grps <- bind_cols(nhanes, as_tibble(food_groups_tc_scores)) %>%
   # Set up outcome variable for Beta regression
   mutate(prop_CAL_sites3mm_beta = PropTransform(prop_CAL_sites3mm)) 
 
+
+
 #food_groups_out <- bind_cols(diet, data.frame(food_groups_tc_scores))
 
 WrapLabel <- function(x){

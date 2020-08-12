@@ -29,8 +29,14 @@ demographic <- list.files(path = here("NHANES"), pattern = "DEMO", recursive = T
               WAVE = str_extract(., "[A-Z]{1}(?=.XPT)"),
               stringsAsFactors = FALSE)) %>% 
   bind_rows() %>% 
+  as_tibble() %>% 
   mutate(WAVE = if_else(WAVE == "O", "A", WAVE)) %>% 
-  select(SEQN, WAVE, SDDSRVYR, RIDSTATR, RIAGENDR, RIDAGEYR, INDFMPIR, DMDEDUC2)
+  # Set refused or don't know for edcuational attainment to missing
+  mutate_at(vars(DMDEDUC2), ~if_else(. %in% c(7, 9), as.numeric(NA), .)) %>% 
+  mutate_at(vars(DMDEDUC2, RIDRETH1, INDFMIN2), ~fct_explicit_na(as.factor(.))) %>% 
+  select(SEQN, WAVE, SDDSRVYR, RIDSTATR, RIAGENDR, RIDAGEYR, RIDRETH1, INDFMIN2, DMDEDUC2)
+
+demographic %>% count(DMDEDUC2)
 
 ## Diabetes data ##
 # HbA1c
