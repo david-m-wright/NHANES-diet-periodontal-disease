@@ -306,3 +306,66 @@ rob10_summary_pca <- nh_grps_pca %>%
   # rename(`Odds Ratio (median sites with CAL)` = `Odds Ratio`) %>% 
   pivot_longer(cols = -one_of("PC", "PC_decile"), names_to = "Metric") %>% 
   pivot_wider(names_from = PC_decile)
+
+
+### Robust regression including BMI ###
+
+rob12_pca <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                     x = model.matrix(update(rob_mod_pca, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2 + BMXBMI), data = nh_grps_pca),
+                     p = 0.5)
+
+rob12_lower_pca <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                     x = model.matrix(update(rob_mod_pca, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2 + BMXBMI), data = nh_grps_pca),
+                     p = 0.25)
+
+rob12_upper_pca <- Log.lqr(y = nh_grps$prop_CAL_sites3mm, 
+                           x = model.matrix(update(rob_mod_pca, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2 + BMXBMI), data = nh_grps_pca),
+                           p = 0.75)
+
+rob12_coef_pca <- bind_cols(Term = colnames(model.matrix(update(rob_mod_pca, ~.-SMQ020 + smoking + RIDRETH1 + DMDEDUC2 + BMXBMI), data = nh_grps_pca)),
+                            as_tibble(rob12_pca$table, .name_repair = "minimal")) %>% 
+  mutate(OR = formatC(exp(Estimate), format = "f", digits = 2)) %>% 
+  rename(Sig = V1)
+
+
+# Format all the PC estimates 
+rob12_summary_pca <- nh_grps_pca %>% 
+  select(SEQN, matches("^PC[0-9]{1}_dec"),
+         CAL_mouth_mean, PD_mouth_mean) %>% 
+  cbind(predicted_robust = invlogit(rob12_pca$fitted.values),
+        predicted_lower = invlogit(rob12_lower_pca$fitted.values),
+        predicted_upper = invlogit(rob12_upper_pca$fitted.values)) %>% 
+  pivot_longer(cols = matches("^PC[0-9]{1}_dec"), 
+               names_to = "PC", 
+               values_to = "PC_decile") %>% 
+  group_by(PC, PC_decile) %>% 
+  summarise(`Median sites with CAL` = paste0(perc(median(predicted_robust)),
+                                             " (",str_replace(perc(median(predicted_lower)), "%", ""), ",", 
+                                             str_replace(perc(median(predicted_upper)), "%", ""), ")"),
+            CAL_mouth = mean(CAL_mouth_mean),
+            CAL_mouth_se =
+              sd(CAL_mouth_mean)/sqrt(length(CAL_mouth_mean)),
+            PD_mouth = mean(PD_mouth_mean),
+            PD_mouth_se = sd(PD_mouth_mean)/sqrt(length(CAL_mouth_mean))) %>%
+  mutate_at(vars(CAL_mouth, PD_mouth), formatC, digits = 1, format = "f") %>% 
+  mutate_at(vars(CAL_mouth_se, PD_mouth_se), formatC, digits = 2, format = "f") %>% 
+  mutate(`Mean CAL (mm)` = paste0(CAL_mouth, " (", CAL_mouth_se, ")"),
+         `Mean PPD (mm)` = paste0(PD_mouth, " (", PD_mouth_se, ")")) %>% 
+  unite(col = Term, PC, PC_decile, sep = "", remove = F) %>% 
+  left_join(rob12_coef_pca %>% 
+              mutate(`Odds Ratio` = FormatOddsRatio(Estimate, `Std. Error`),
+                     P = format.pval(`Pr(>|z|)`, digits = 1, eps = 0.001)),
+            by = "Term") %>% 
+  ungroup() %>% 
+  mutate_at(vars(`Median sites with CAL`, P), ~if_else(is.na(.), "", .)) %>% 
+  mutate(`Odds Ratio` = if_else(is.na(`Odds Ratio`), "1.00", `Odds Ratio`)) %>% 
+  mutate(PC = str_extract(PC, "^PC[0-9]{1}")) %>% 
+  
+  select(PC, PC_decile, `Median sites with CAL`, `Odds Ratio`, `Mean CAL (mm)`, `Mean PPD (mm)`) %>% 
+  rename(`Median % sites with CAL $\\geq$ 3mm` = `Median sites with CAL`,
+         `Mean CAL (± SE) mm` = `Mean CAL (mm)`,
+         `Mean PPD  (± SE) mm` = `Mean PPD (mm)`) %>% 
+  # rename(`Odds Ratio (median sites with CAL)` = `Odds Ratio`) %>% 
+  pivot_longer(cols = -one_of("PC", "PC_decile"), names_to = "Metric") %>% 
+  pivot_wider(names_from = PC_decile)
+

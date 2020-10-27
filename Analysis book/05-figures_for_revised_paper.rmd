@@ -5,8 +5,9 @@ library(knitr)
 knitr::opts_chunk$set(echo = FALSE)
 library(here)
 library(checkpoint)
-checkpoint_date <- "2020-04-01"
+checkpoint_date <- "2020-04-02"
 checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
+# library(rlang)
 library(tidyverse)
 ```
 

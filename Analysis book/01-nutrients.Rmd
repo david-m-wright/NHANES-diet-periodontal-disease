@@ -5,7 +5,7 @@ library(knitr)
 knitr::opts_chunk$set(echo = F)
 library(here)
 library(checkpoint)
-checkpoint_date <- "2019-07-31"
+checkpoint_date <- "2020-04-02"
 checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
 
 ```

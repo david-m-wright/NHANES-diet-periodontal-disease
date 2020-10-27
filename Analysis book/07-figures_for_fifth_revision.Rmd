@@ -1,0 +1,182 @@
+# Additional analyses and reformatting of results {#BMI}
+
+```{r setup, include = FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
+library(here)
+library(checkpoint)
+checkpoint_date <- "2020-04-02"
+checkpoint(checkpoint_date, use.knitr = TRUE, project = here())
+library(tidyverse)
+library(kableExtra)
+```
+
+Chapter compiled **`r Sys.Date()`**   
+
+R checkpoint **`r checkpoint_date`**   
+
+This chapter comprises additional analyses following the fourth round of reviewing at the _American Journal for Clinical Nutrition_. Updated figures and tables are also provided.
+
+```{r prepare-modelling-dataset, include=FALSE}
+source(here("Code", "diet_periodontal.R"))
+source(here("Code", "helper_functions.R"))
+```
+
+```{r run-analyses, include=FALSE}
+source(here("Code", "treelet_food_groups.R"))
+source(here("Code", "food_groups.R"))
+source(here("Code", "food_groups_PCA.R"))
+```
+
+The editors requested that BMI be included as an additional predictor in the models of periodontal disease. They also requested reformatting of the tables and inclusion of additional health related variables in the table of descriptive statistics. The additional variables were:
+
+`Diabetes` indicating diabetes reported in the questionnaire or HbA1c >6.5   
+Cardiovascular disease (`CVD`) indicating whether the individual had suffered heart failure (`MCQ160B`), angina (`MCQ160D`), heart attack (`MCQ160E`) or stroke (`MCQ160F`).   
+Medication use (`Medications`) indicating the number of types of prescription medications used in the past month.
+
+## Figures for text
+A small number of individuals were excluded with no BMI measurement. Combining this exclusion with 'no medical examination', the revised cohort construction numbers are:
+
+NHANES respondents 2009-2014: `r nrow(filter(nhanes_all, between(SDDSRVYR, 6, 8)))`   
+Persons aged $\geq30$ years: `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30))`   
+Persons aged $\geq30$ years with medical examination (including BMI):`r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    !is.na(BMXBMI)))`   
+Persons aged $\geq30$ years with medical examination who are dentate:`r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    !is.na(BMXBMI),
+                                    tooth_count > 0))`   
+Persons aged $\geq30$ years with medical examination who are dentate and eligible for periodontal exam:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    !is.na(BMXBMI),
+                                    tooth_count > 0,
+                                    EXCLU != 1))`   
+Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    !is.na(BMXBMI),
+                                    tooth_count > 0,
+                                    EXCLU != 1,
+                                    PDSTS == 1))`   
+Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam with $\geq1$ sites assessed for clinical attachment loss:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    !is.na(BMXBMI),
+                                    tooth_count > 0,
+                                    EXCLU != 1,
+                                    PDSTS == 1,
+                                    CAL_sites_assessed > 0))`   
+Persons aged $\geq30$ years with medical examination who are dentate, eligible and had a completed periodontal exam with $\geq1$ sites assessed for clinical attachment loss and had valid dietary data:
+                            `r nrow(filter(nhanes_all, 
+                                    between(SDDSRVYR, 6, 8),
+                                    RIDAGEYR >= 30,
+                                    RIDSTATR == 2,
+                                    !is.na(BMXBMI),
+                                    tooth_count > 0,
+                                    EXCLU != 1,
+                                    PDSTS == 1,
+                                    CAL_sites_assessed > 0,
+                                    PD_sites_assessed > 0,
+                                    dietary == T))`   
+
+
+Predicted CAL extent for white, male, high school graduate, non-smoker, non-diabetic in decile 5 for each TC, aged 48: `r round(rob12_age48, 1)`   
+Predicted CAL extent for white, male, high school graduate, non-smoker, non-diabetic in decile 5 for each TC, aged 62: `r round(rob12_age62, 1)`  
+
+
+AIC of robust logistic quantile regression of median CAL proportion with three category smoking status and TCs categorised into deciles: `r round(rob12$AIC)`
+AIC of robust logistic quantile regression of median CAL proportion with three category smoking status and straight line relationships only with TCs: `r round(rob13$AIC)`
+
+```{r selected robust-coefficients-SES}
+rob12_coef %>% 
+  kable(caption = "Association between dietary Treelet Component scores, adjustment variables and extent of clinical attachment loss.")
+
+```
+
+## Tables
+
+```{r robust-coefficients-BMI}
+rob12_summary %>% 
+  filter(str_detect(Metric, "Mean", negate = T)) %>% 
+  kable(caption = "Association between dietary Treelet Component scores and extent of clinical attachment loss (CAL).") %>% 
+   kable_styling(latex_options="scale_down")
+```
+
+```{r descriptive-stats-by-CAL-quartile-BMI, warning=F}
+bind_rows(
+nhanes %>% 
+  rename(`Mean Age (SD)` = RIDAGEYR) %>% 
+  SummariseContinuousTwoway(vars(`Mean Age (SD)`), CAL_sites_quartile),
+nhanes %>%
+  mutate(Sex = factor(if_else(RIAGENDR == 1, "Male", "Female"), levels = c("Male", "Female")),
+         Diabetes = factor(if_else(diabetes, "Diabetes", "No diabetes"), levels = c("No diabetes", "Diabetes")),
+         Smoking = factor(case_when(smoking == "Never" ~ "Never smoked",
+                             smoking == "Former" ~ "Former smoker",
+                             smoking == "Current" ~ "Current smoker"), 
+                          levels = c("Never smoked", "Former smoker", "Current smoker")),
+         Ethnicity = factor(case_when(RIDRETH1 == 1 ~ "Mexican American",
+                                      RIDRETH1 == 2 ~ "Other Hispanic",
+                                      RIDRETH1 == 3 ~ "Non-Hispanic White",
+                                      RIDRETH1 == 4 ~ "Non-Hispanic Black",
+                                      RIDRETH1 == 5 ~ "Other race - including Multi-Racial"),
+                            levels = c("Mexican American",
+                                       "Other Hispanic",
+                                       "Non-Hispanic White",
+                                       "Non-Hispanic Black",
+                                       "Other race - including Multi-Racial")),
+         `Education level` = factor(case_when(DMDEDUC2 == 1 ~ "Education:Less than 9th grade",
+                                       DMDEDUC2 == 2 ~ "Education:9-11th grade",
+                                       DMDEDUC2 ==3 ~ "Education:High school graduate",
+                                       DMDEDUC2 == 4 ~ "Education:Some college",
+                                       DMDEDUC2 == 5 ~ "Education:College graduate or above",
+                                       DMDEDUC2 == "(Missing)" ~ "Education:Refused/don't know"),
+         levels = c("Education:Less than 9th grade", 
+                    "Education:9-11th grade", 
+                    "Education:High school graduate", 
+                    "Education:Some college", 
+                    "Education:College graduate or above",
+                    "Education:Refused/don't know")))  %>% 
+  SummariseDiscreteTwoway(vars(Sex, Ethnicity, `Education level`, Diabetes, CVD, Smoking), CAL_sites_quartile),
+
+nhanes %>% 
+  group_by(CAL_sites_quartile) %>% 
+  summarise(`Medication types` = paste0(median(Medications), " (", 
+                                        quantile(Medications, 0.25), ",", 
+                                        quantile(Medications, 0.75), ")")) %>% 
+  pivot_wider(values_from = `Medication types`, names_from = CAL_sites_quartile) %>% 
+  mutate(Variable = "Medications: Median (interquartile range)"),
+nhanes %>% 
+  rename(`Mean BMI (SD)` = BMXBMI) %>% 
+  SummariseContinuousTwoway(vars(`Mean BMI (SD)`), CAL_sites_quartile)
+
+) %>% 
+  mutate(Level = coalesce(Level, Variable)) %>% 
+  select(Level, one_of(as.character(1:4))) %>% 
+  filter(str_detect(Level, "^-$|No diabetes|No cardiovascular disease", negate = T)) %>% 
+  kable(caption = "Cohort characteristics by quartile of CAL extent.")
+
+
+```
+
+## Supplementary tables
+
+```{r robust-coefficients-PCA-BMI}
+rob12_summary_pca %>% 
+  filter(str_detect(Metric, "Mean", negate = T)) %>% 
+  kable(caption = "Association between dietary Principal Component scores and extent of clinical attachment loss (CAL).") %>% 
+   kable_styling(latex_options="scale_down")
+```
+

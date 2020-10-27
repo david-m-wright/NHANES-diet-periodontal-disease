@@ -22,7 +22,6 @@ smoking <- list.files(path = here("NHANES"), pattern = "SMQ", recursive = T, ful
             levels = c("Never", "Former", "Current")))
 
 ## Demographic data ##
-
 demographic <- list.files(path = here("NHANES"), pattern = "DEMO", recursive = T, full.names = T) %>% 
   map(~ cbind(read_xpt(.), 
               # Including wave membership
@@ -53,6 +52,32 @@ diabetes <- list.files(path = here("NHANES"), pattern = "DIQ", recursive = T, fu
   # Composite measure using HbA1c or questionnaire
   mutate(diabetes = if_else((!is.na(LBXGH) & LBXGH > 6.5 )|(!is.na(DIQ010) & DIQ010 == 1), T, F))
   
+## Cardiovascular disease data ##
+cvd <- list.files(path = here("NHANES"), pattern = "MCQ", recursive = T, full.names = T) %>% 
+  lapply(read_xpt) %>% 
+  bind_rows() %>% 
+  # Heart failure, angina, heart attack, stroke  1== yes, 2 == no
+  select(SEQN, MCQ160B, MCQ160D, MCQ160E, MCQ160F) %>% 
+  mutate(CVD = if_else(MCQ160B == 1|MCQ160D == 1|MCQ160E == 1|MCQ160F == 1, "Cardiovascular disease", "No cardiovascular disease")) %>% 
+  select(SEQN, CVD)
+
+## BMI data ##
+bmi <- list.files(path = here("NHANES"), pattern = "BMX", recursive = T, full.names = T) %>% 
+  lapply(read_xpt) %>% 
+  bind_rows() %>% 
+  select(SEQN, BMXBMI) 
+
+## Medication use data ##
+
+medications <- list.files(path = here("NHANES"), pattern = "RXQ_RX", recursive = T, full.names = T) %>% 
+  lapply(read_xpt) %>% 
+  bind_rows() %>% 
+  select(SEQN, RXD295, RXDCOUNT) %>% 
+  mutate(Medications = coalesce(RXD295, RXDCOUNT),
+         Medications = if_else(is.na(Medications), 0, Medications)) %>% 
+  select(SEQN, Medications) %>% 
+  distinct()
+# medications %>% count(Medications) %>% print(n=Inf)
 
 
 ### Construct the cohort ###
@@ -66,6 +91,9 @@ nhanes_all <- demographic %>%
   left_join(perio_cal, by = "SEQN") %>% 
   left_join(perio_pocket, by = "SEQN") %>% 
   left_join(diabetes, by = "SEQN") %>% 
+  left_join(cvd, by = "SEQN") %>% 
+  left_join(bmi, by = "SEQN") %>% 
+  left_join(medications, by = "SEQN") %>% 
   left_join(transmute(dietary, SEQN, dietary = T), by = "SEQN")
 
     
@@ -75,8 +103,8 @@ nhanes <- nhanes_all %>%
   filter(between(SDDSRVYR, 6, 8)) %>% 
   # Exclude aged < 30
   filter(RIDAGEYR >= 30) %>% 
-  # Exclude with no medical exam
-  filter(RIDSTATR == 2) %>% 
+  # Exclude with no medical exam (or missing BMI)
+  filter(RIDSTATR == 2, !is.na(BMXBMI)) %>% 
   # Exclude edentulous people
   filter(tooth_count > 0)  %>% 
   # Exclude people with medical exclusion from periodontal exam
