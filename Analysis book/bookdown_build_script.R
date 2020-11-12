@@ -25,3 +25,5 @@ setwd(here("Analysis book"))
 
 # Render the entire book
 bookdown::render_book("index.Rmd", "bookdown::gitbook", new_session = T)
+
+bookdown::render_book("index.Rmd", "bookdown::pdf_book", new_session = T)
